@@ -5,18 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
   <meta name="description" content="ترند العراق - متجرك الأول للموضة والتقنية" />
   <meta name="theme-color" content="#dc2626" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>ترند العراق - متجرك الأول</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect rx='20' fill='%23dc2626' width='100' height='100'/%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='50'%3E🔥%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" type="image/webp" href="assets/logo.webp" />
+  
+  <!-- تحميل الملفات بـ timestamp ديناميكي لتجاوز الكاش -->
+  <script>
+    (function() {
+      const v = Date.now();
+      // تحميل styles.css ديناميكياً
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'styles.css?v=' + v;
+      document.head.appendChild(link);
+      // حفظ النسخة لاستخدامها في app.js
+      window._cacheVersion = v;
+    })();
+  </script>
 </head>
 <body>
   <!-- شاشة التحميل -->
   <div id="loadingScreen" class="loading-screen">
+    <img src="assets/logo.webp" alt="ترند العراق" class="loading-logo" />
     <div class="spinner"></div>
     <p>جاري التحميل...</p>
   </div>
@@ -24,8 +41,19 @@
   <!-- التطبيق -->
   <div id="app" style="display:none;"></div>
 
-  <!-- Firebase SDKs -->
-  <script type="module" src="firebase-config.js"></script>
-  <script type="module" src="app.js"></script>
+  <!-- Firebase SDKs مع timestamp ديناميكي -->
+  <script>
+    (function() {
+      const v = window._cacheVersion || Date.now();
+      const s1 = document.createElement('script');
+      s1.type = 'module';
+      s1.src = 'firebase-config.js?v=' + v;
+      document.body.appendChild(s1);
+      const s2 = document.createElement('script');
+      s2.type = 'module';
+      s2.src = 'app.js?v=' + v;
+      document.body.appendChild(s2);
+    })();
+  </script>
 </body>
 </html>

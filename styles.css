@@ -1819,3 +1819,332 @@ body.dark-mode .product-row:hover,
 body.dark-mode .icon-btn:hover { background: #44403c; }
 
 body.dark-mode .mobile-menu { background: #292524; }
+
+/* ============================
+   شعار المتجر
+   ============================ */
+
+.loading-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 8px;
+  animation: logoPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* الشعار في الهيدر */
+.logo-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.logo-icon {
+  background: white !important;
+  padding: 4px;
+  border: 1px solid var(--border);
+}
+
+/* الشعار في الفوتر */
+.footer-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  background: white;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+/* الشعار في زر العائم - بدلاً من رمز الواتساب نضع لوجو */
+.float-whatsapp {
+  font-size: 28px;
+}
+
+/* ============================
+   صور المنتج المتعددة + الفيديو
+   ============================ */
+
+/* معرض الصور (Gallery) في تفاصيل المنتج */
+.product-gallery {
+  position: relative;
+  background: #f5f5f4;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.gallery-main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.gallery-main::-webkit-scrollbar { display: none; }
+
+.gallery-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f4;
+}
+
+.gallery-slide img,
+.gallery-slide video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery-slide video {
+  object-fit: contain;
+  background: #000;
+}
+
+.video-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+  cursor: pointer;
+  pointer-events: none;
+}
+
+.video-play-icon {
+  width: 64px;
+  height: 64px;
+  background: rgba(255,255,255,0.95);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+/* النقاط - مؤشر الصورة الحالية */
+.gallery-dots {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.gallery-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.gallery-dot.active {
+  background: white;
+  width: 24px;
+  border-radius: 4px;
+}
+
+/* مصغرات الصور */
+.gallery-thumbs {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  background: white;
+  scrollbar-width: none;
+}
+
+.gallery-thumbs::-webkit-scrollbar { display: none; }
+
+.gallery-thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: #f5f5f4;
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+.gallery-thumb.active {
+  border-color: var(--primary);
+}
+
+.gallery-thumb img,
+.gallery-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery-thumb-video::after {
+  content: '▶';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+  color: white;
+  font-size: 14px;
+}
+
+/* ============================
+   نموذج إضافة منتج - صور متعددة
+   ============================ */
+
+.images-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.image-slot {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: #f5f5f4;
+}
+
+.image-slot img,
+.image-slot video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-slot.main::before {
+  content: 'رئيسية';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--primary);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.image-slot-remove {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.video-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.upload-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.upload-btn-small {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 2px dashed var(--primary);
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upload-btn-small:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.upload-btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.video-progress {
+  background: var(--primary-light);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: white;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s;
+}
+
+/* بطاقة المنتج: أيقونة الفيديو */
+.has-video-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}

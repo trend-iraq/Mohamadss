@@ -124,9 +124,16 @@ async function loadSettings() {
 }
 
 function subscribeProducts() {
-  const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-  const unsub = onSnapshot(q, (snap) => {
-    state.products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // ترتيب محلي بدل orderBy لتجنّب مشكلة serverTimestamp المتأخر
+  const unsub = onSnapshot(collection(db, 'products'), (snap) => {
+    const products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // ترتيب محلي: المنتجات بدون createdAt (الجديدة) تظهر أولاً، ثم الباقي بالأحدث
+    products.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a._localCreatedAt || Date.now());
+      const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b._localCreatedAt || Date.now());
+      return bTime - aTime;
+    });
+    state.products = products;
     if (state.view === 'store') render();
     else if (state.view === 'admin') renderAdmin();
   }, (err) => {
@@ -137,9 +144,15 @@ function subscribeProducts() {
 
 function subscribeOrders() {
   if (!state.user) return;
-  const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-  const unsub = onSnapshot(q, (snap) => {
-    state.orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // ترتيب محلي بدل orderBy
+  const unsub = onSnapshot(collection(db, 'orders'), (snap) => {
+    const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    orders.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a._localCreatedAt || Date.now());
+      const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b._localCreatedAt || Date.now());
+      return bTime - aTime;
+    });
+    state.orders = orders;
     if (state.view === 'admin') renderAdmin();
   }, (err) => {
     console.error('خطأ في تحميل الطلبات:', err);
@@ -170,7 +183,11 @@ async function saveProduct(data, id = null) {
     if (id) {
       await updateDoc(doc(db, 'products', id), { ...data, updatedAt: serverTimestamp() });
     } else {
-      await addDoc(collection(db, 'products'), { ...data, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'products'), { 
+        ...data, 
+        createdAt: serverTimestamp(),
+        _localCreatedAt: Date.now()  // قيمة فورية تستخدم حتى يصل serverTimestamp
+      });
     }
     return true;
   } catch (err) {
@@ -199,6 +216,7 @@ async function createOrder(orderData) {
       orderNumber,
       status: 'pending',
       createdAt: serverTimestamp(),
+      _localCreatedAt: Date.now()
     });
     return { id: ref.id, orderNumber };
   } catch (err) {
@@ -233,7 +251,8 @@ function addToCart(product) {
   if (existing) {
     existing.qty++;
   } else {
-    state.cart.push({ id: product.id, name: product.name, price: product.price, image: product.image, qty: 1 });
+    const mainImage = (product.images && product.images[0]) || product.image || '';
+    state.cart.push({ id: product.id, name: product.name, price: product.price, image: mainImage, qty: 1 });
   }
   showToast('✓ تمت الإضافة إلى السلة');
   updateCartBadge();
@@ -320,7 +339,7 @@ function render() {
     <header class="header">
       <div class="header-content">
         <div class="logo">
-          <div class="logo-icon">🔥</div>
+          <div class="logo-icon"><img src="assets/logo.webp" alt="ترند العراق" class="logo-icon-img" /></div>
           <div>
             <h1>${escapeHtml(s.storeName)}</h1>
             <p>TREND IRAQ</p>
@@ -421,7 +440,7 @@ function render() {
       <div class="footer-content">
         <div class="footer-section">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-            <div class="logo-icon">🔥</div>
+            <div class="logo-icon"><img src="assets/logo.webp" alt="ترند العراق" class="logo-icon-img" /></div>
             <h4 style="font-family:'Cairo',sans-serif;font-size:24px;font-weight:900;">${escapeHtml(s.storeName)}</h4>
           </div>
           <p>${escapeHtml(s.tagline)}</p>
@@ -454,12 +473,18 @@ function render() {
 function renderProductCard(p) {
   const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const placeholderImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23e7e5e4" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23a8a29e" font-size="10">صورة</text></svg>';
+  // الصورة الرئيسية: من images[0] إن وجد، وإلا من image القديم
+  const mainImage = (p.images && p.images.length > 0) ? p.images[0] : (p.image || placeholderImg);
+  const hasVideo = !!p.video;
+  const extraImagesCount = (p.images?.length || 0) - 1;
+  
   return `
     <div class="product-card">
       <div class="product-image-wrapper" data-product-id="${p.id}" data-action="view-product">
-        <img class="product-image" src="${escapeHtml(p.image || placeholderImg)}" alt="${escapeHtml(p.name)}" onerror="this.src='${placeholderImg}'" />
+        <img class="product-image" src="${escapeHtml(mainImage)}" alt="${escapeHtml(p.name)}" onerror="this.src='${placeholderImg}'" />
         ${discount > 0 ? `<div class="discount-badge">-${discount}%</div>` : ''}
         ${p.featured ? `<div class="featured-badge">🔥 تريند</div>` : ''}
+        ${hasVideo ? `<div class="has-video-badge">▶ فيديو</div>` : (extraImagesCount > 0 ? `<div class="has-video-badge">📷 +${extraImagesCount}</div>` : '')}
       </div>
       <div class="product-info">
         <h4 class="product-name" data-product-id="${p.id}" data-action="view-product">${escapeHtml(p.name)}</h4>
@@ -519,15 +544,59 @@ function showProductModal(p) {
   const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const placeholderImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23e7e5e4" width="100" height="100"/></svg>';
   
+  // جمع كل الوسائط (صور + فيديو)
+  const media = [];
+  if (p.images && p.images.length > 0) {
+    p.images.forEach(img => media.push({ type: 'image', src: img }));
+  } else if (p.image) {
+    media.push({ type: 'image', src: p.image });
+  }
+  if (p.video) {
+    media.push({ type: 'video', src: p.video });
+  }
+  if (media.length === 0) {
+    media.push({ type: 'image', src: placeholderImg });
+  }
+  
   const html = `
     <div class="modal-overlay" data-overlay>
       <div class="modal product-modal">
         <div class="product-detail">
-          <div class="product-detail-image">
-            <img src="${escapeHtml(p.image || placeholderImg)}" alt="${escapeHtml(p.name)}" />
+          <div class="product-gallery">
             <button class="product-detail-close" data-close>×</button>
-            ${discount > 0 ? `<div class="discount-badge" style="top:12px;right:12px;font-size:14px;padding:6px 12px;">خصم ${discount}%</div>` : ''}
+            ${discount > 0 ? `<div class="discount-badge" style="position:absolute;top:12px;right:12px;font-size:14px;padding:6px 12px;z-index:3;">خصم ${discount}%</div>` : ''}
+            <div class="gallery-main" id="galleryMain">
+              ${media.map((m, i) => `
+                <div class="gallery-slide" data-slide="${i}">
+                  ${m.type === 'image' ? `
+                    <img src="${escapeHtml(m.src)}" alt="${escapeHtml(p.name)}" />
+                  ` : `
+                    <video src="${escapeHtml(m.src)}" controls playsinline preload="metadata"></video>
+                  `}
+                </div>
+              `).join('')}
+            </div>
+            ${media.length > 1 ? `
+              <div class="gallery-dots">
+                ${media.map((_, i) => `<button class="gallery-dot ${i === 0 ? 'active' : ''}" data-dot="${i}"></button>`).join('')}
+              </div>
+            ` : ''}
           </div>
+          
+          ${media.length > 1 ? `
+            <div class="gallery-thumbs">
+              ${media.map((m, i) => `
+                <div class="gallery-thumb ${i === 0 ? 'active' : ''} ${m.type === 'video' ? 'gallery-thumb-video' : ''}" data-thumb="${i}">
+                  ${m.type === 'image' ? `
+                    <img src="${escapeHtml(m.src)}" alt="" />
+                  ` : `
+                    <video src="${escapeHtml(m.src)}" preload="metadata"></video>
+                  `}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+          
           <div class="product-detail-info">
             <h2>${escapeHtml(p.name)}</h2>
             <div class="product-detail-prices">
@@ -559,6 +628,39 @@ function showProductModal(p) {
     addToCart(p);
     closeModal();
   });
+  
+  // التحكم في المعرض - النقاط والمصغرات
+  const galleryMain = $('#galleryMain');
+  if (galleryMain && media.length > 1) {
+    // عند الضغط على نقطة أو مصغرة
+    const goToSlide = (index) => {
+      const slide = galleryMain.querySelector(`[data-slide="${index}"]`);
+      if (slide) {
+        slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      }
+      document.querySelectorAll('.gallery-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+      document.querySelectorAll('.gallery-thumb').forEach((t, i) => t.classList.toggle('active', i === index));
+    };
+    
+    document.querySelectorAll('[data-dot]').forEach(d => {
+      d.addEventListener('click', () => goToSlide(parseInt(d.dataset.dot)));
+    });
+    document.querySelectorAll('[data-thumb]').forEach(t => {
+      t.addEventListener('click', () => goToSlide(parseInt(t.dataset.thumb)));
+    });
+    
+    // تحديث النقاط والمصغرات عند التمرير
+    let scrollTimer;
+    galleryMain.addEventListener('scroll', () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const slideWidth = galleryMain.clientWidth;
+        const currentIndex = Math.round(galleryMain.scrollLeft / slideWidth);
+        document.querySelectorAll('.gallery-dot').forEach((d, i) => d.classList.toggle('active', i === currentIndex));
+        document.querySelectorAll('.gallery-thumb').forEach((t, i) => t.classList.toggle('active', i === currentIndex));
+      }, 100);
+    });
+  }
 }
 
 function renderCart() {
@@ -1037,7 +1139,7 @@ function renderAdminProducts() {
       <div class="products-list">
         ${filtered.map(p => `
           <div class="product-row">
-            <img src="${escapeHtml(p.image || '')}" alt="" onerror="this.style.opacity=0.3" />
+            <img src="${escapeHtml((p.images && p.images[0]) || p.image || '')}" alt="" onerror="this.style.opacity=0.3" />
             <div class="product-row-info">
               <h4>
                 ${escapeHtml(p.name)}
@@ -1085,12 +1187,36 @@ function renderAdminProducts() {
   });
 }
 
+// معالجة الفيديو مع ضغط بسيط
+function processVideo(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('video/')) return reject(new Error('ملف غير صالح'));
+    // الحد الأقصى للفيديو: 5 ميجا (لأنه يُحفظ كـ base64 في Firestore)
+    if (file.size > 5 * 1024 * 1024) {
+      return reject(new Error('حجم الفيديو يجب أن يكون أقل من 5 ميجا'));
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('فشل قراءة الفيديو'));
+    reader.readAsDataURL(file);
+  });
+}
+
+const MAX_IMAGES = 5;
+
 function showProductForm(product) {
   closeModal();
   const isEdit = !!product;
-  const data = product || { name:'', price:'', oldPrice:'', category:'fashion', image:'', description:'', stock:10, featured:false };
-  let useUrl = !!(data.image && data.image.startsWith('http'));
-  let currentImage = data.image || '';
+  const data = product || { name:'', price:'', oldPrice:'', category:'fashion', images:[], video:'', description:'', stock:10, featured:false };
+  
+  // التوافق مع المنتجات القديمة التي لها image واحدة فقط
+  let images = [];
+  if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+    images = [...data.images];
+  } else if (data.image) {
+    images = [data.image];
+  }
+  let video = data.video || '';
   
   const html = `
     <div class="modal-overlay" data-overlay>
@@ -1101,30 +1227,16 @@ function showProductForm(product) {
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>صورة المنتج <span class="req">*</span></label>
-            <div id="imagePreviewContainer">
-              ${currentImage ? `
-                <div class="image-preview">
-                  <img id="previewImg" src="${escapeHtml(currentImage)}" alt="" />
-                  <button class="image-remove" id="removeImg">×</button>
-                </div>
-              ` : ''}
+            <label>صور المنتج <span class="req">*</span> <span style="font-weight:normal;color:var(--text-muted);font-size:12px;">(حتى 5 صور)</span></label>
+            <div class="images-container" id="imagesContainer"></div>
+            <div class="upload-buttons">
+              <input type="file" id="imageInput" accept="image/*" multiple style="display:none;" />
+              <input type="file" id="videoInput" accept="video/*" style="display:none;" />
+              <button type="button" class="upload-btn-small" id="addImageBtn">📷 إضافة صورة</button>
+              <button type="button" class="upload-btn-small" id="addVideoBtn">🎬 ${video ? 'تغيير الفيديو' : 'إضافة فيديو'}</button>
             </div>
-            <div class="tabs-toggle">
-              <button class="tab-toggle-btn ${!useUrl ? 'active' : ''}" id="tabUpload">📤 رفع صورة</button>
-              <button class="tab-toggle-btn ${useUrl ? 'active' : ''}" id="tabUrl">🔗 رابط صورة</button>
-            </div>
-            <div id="uploadSection" style="display:${!useUrl ? 'block' : 'none'};">
-              <input type="file" id="fileInput" accept="image/*" style="display:none;" />
-              <div class="upload-area" id="dropZone">
-                <div class="upload-icon">📤</div>
-                <p>اضغط لاختيار صورة من جهازك</p>
-                <p class="small">سيتم تصغيرها وضغطها تلقائياً (600×600)</p>
-              </div>
-            </div>
-            <div id="urlSection" style="display:${useUrl ? 'block' : 'none'};">
-              <input type="text" id="imageUrl" placeholder="https://..." value="${escapeHtml(currentImage.startsWith('http') ? currentImage : '')}" style="direction:ltr;text-align:left;" />
-            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">💡 الصور تُضغط تلقائياً (600×600). الفيديو حتى 5 ميجا.</p>
+            <div id="videoProgress"></div>
           </div>
           
           <div class="form-group">
@@ -1181,58 +1293,123 @@ function showProductForm(product) {
     el.addEventListener('click', (e) => { if (e.target === el) closeModal(); });
   });
   
-  $('#tabUpload')?.addEventListener('click', () => {
-    useUrl = false;
-    $('#uploadSection').style.display = 'block';
-    $('#urlSection').style.display = 'none';
-    $('#tabUpload').classList.add('active');
-    $('#tabUrl').classList.remove('active');
-  });
-  
-  $('#tabUrl')?.addEventListener('click', () => {
-    useUrl = true;
-    $('#uploadSection').style.display = 'none';
-    $('#urlSection').style.display = 'block';
-    $('#tabUrl').classList.add('active');
-    $('#tabUpload').classList.remove('active');
-  });
-  
-  $('#dropZone')?.addEventListener('click', () => $('#fileInput').click());
-  
-  $('#fileInput')?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('حجم الصورة كبير جداً (الحد 10 ميجا)', 'error');
-      return;
-    }
-    const dz = $('#dropZone');
-    dz.innerHTML = '<div class="upload-icon">⏳</div><p>جاري المعالجة...</p>';
-    try {
-      const dataUrl = await processImage(file, 600, 0.82);
-      currentImage = dataUrl;
-      $('#imagePreviewContainer').innerHTML = `
-        <div class="image-preview">
-          <img id="previewImg" src="${dataUrl}" alt="" />
-          <button class="image-remove" id="removeImg">×</button>
+  // عرض الصور والفيديو
+  function renderImages() {
+    const c = $('#imagesContainer');
+    let html = '';
+    images.forEach((img, i) => {
+      html += `
+        <div class="image-slot ${i === 0 ? 'main' : ''}">
+          <img src="${escapeHtml(img)}" alt="" />
+          <button class="image-slot-remove" data-remove-image="${i}">×</button>
         </div>
       `;
-      $('#removeImg').addEventListener('click', () => {
-        currentImage = '';
-        $('#imagePreviewContainer').innerHTML = '';
-      });
-      dz.innerHTML = '<div class="upload-icon">📤</div><p>اضغط لاختيار صورة من جهازك</p><p class="small">سيتم تصغيرها وضغطها تلقائياً (600×600)</p>';
-    } catch (err) {
-      showToast('فشلت معالجة الصورة', 'error');
-      dz.innerHTML = '<div class="upload-icon">📤</div><p>اضغط لاختيار صورة من جهازك</p><p class="small">سيتم تصغيرها وضغطها تلقائياً (600×600)</p>';
+    });
+    if (video) {
+      html += `
+        <div class="image-slot">
+          <video src="${escapeHtml(video)}" muted></video>
+          <button class="image-slot-remove" data-remove-video>×</button>
+          <div class="video-badge">▶ فيديو</div>
+        </div>
+      `;
     }
+    c.innerHTML = html;
+    
+    // ربط أزرار الحذف
+    document.querySelectorAll('[data-remove-image]').forEach(b => {
+      b.addEventListener('click', () => {
+        images.splice(parseInt(b.dataset.removeImage), 1);
+        renderImages();
+        updateButtons();
+      });
+    });
+    $('[data-remove-video]')?.addEventListener('click', () => {
+      video = '';
+      renderImages();
+      updateButtons();
+    });
+  }
+  
+  function updateButtons() {
+    const addImgBtn = $('#addImageBtn');
+    const addVidBtn = $('#addVideoBtn');
+    if (images.length >= MAX_IMAGES) {
+      addImgBtn.disabled = true;
+      addImgBtn.innerHTML = `📷 الحد الأقصى (${MAX_IMAGES})`;
+    } else {
+      addImgBtn.disabled = false;
+      addImgBtn.innerHTML = `📷 إضافة صورة (${images.length}/${MAX_IMAGES})`;
+    }
+    addVidBtn.innerHTML = `🎬 ${video ? 'تغيير الفيديو' : 'إضافة فيديو'}`;
+  }
+  
+  renderImages();
+  updateButtons();
+  
+  // إضافة صور
+  $('#addImageBtn').addEventListener('click', () => $('#imageInput').click());
+  $('#imageInput').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    const remaining = MAX_IMAGES - images.length;
+    const filesToProcess = files.slice(0, remaining);
+    
+    if (files.length > remaining) {
+      showToast(`تمت إضافة ${remaining} صور فقط (الحد ${MAX_IMAGES})`, 'error');
+    }
+    
+    const btn = $('#addImageBtn');
+    btn.disabled = true;
+    btn.innerHTML = '⏳ جاري المعالجة...';
+    
+    for (const file of filesToProcess) {
+      if (file.size > 10 * 1024 * 1024) {
+        showToast(`تخطّي ${file.name} - حجم كبير`, 'error');
+        continue;
+      }
+      try {
+        const dataUrl = await processImage(file, 600, 0.82);
+        images.push(dataUrl);
+        renderImages();
+      } catch (err) {
+        showToast('فشلت معالجة صورة', 'error');
+      }
+    }
+    updateButtons();
+    e.target.value = ''; // مسح الإدخال للسماح برفع نفس الملف مجدداً
   });
   
-  $('#removeImg')?.addEventListener('click', () => {
-    currentImage = '';
-    $('#imagePreviewContainer').innerHTML = '';
+  // إضافة فيديو
+  $('#addVideoBtn').addEventListener('click', () => $('#videoInput').click());
+  $('#videoInput').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const progress = $('#videoProgress');
+    progress.innerHTML = `
+      <div class="video-progress">
+        <p style="font-weight:700;font-size:13px;">⏳ جاري معالجة الفيديو...</p>
+        <div class="progress-bar"><div class="progress-bar-fill" style="width:50%;"></div></div>
+      </div>
+    `;
+    
+    try {
+      const dataUrl = await processVideo(file);
+      video = dataUrl;
+      progress.innerHTML = '';
+      renderImages();
+      updateButtons();
+      showToast('✓ تمت إضافة الفيديو');
+    } catch (err) {
+      progress.innerHTML = '';
+      showToast(err.message || 'فشلت معالجة الفيديو', 'error');
+    }
+    e.target.value = '';
   });
   
+  // حفظ المنتج
   $('#saveProduct').addEventListener('click', async () => {
     const name = $('#pName').value.trim();
     const price = parseInt($('#pPrice').value);
@@ -1241,11 +1418,9 @@ function showProductForm(product) {
     const description = $('#pDesc').value.trim();
     const stock = parseInt($('#pStock').value) || 0;
     const featured = $('#pFeatured').checked;
-    let image = currentImage;
-    if (useUrl) image = $('#imageUrl').value.trim();
     
-    if (!name || !price || !image) {
-      showToast('يرجى تعبئة الاسم والسعر والصورة', 'error');
+    if (!name || !price || images.length === 0) {
+      showToast('يرجى تعبئة الاسم والسعر وإضافة صورة واحدة على الأقل', 'error');
       return;
     }
     
@@ -1253,8 +1428,19 @@ function showProductForm(product) {
     btn.disabled = true;
     btn.textContent = 'جاري الحفظ...';
     
-    const productData = { name, price, category, image, description, stock, featured };
+    const productData = { 
+      name, 
+      price, 
+      category, 
+      images,                  // مصفوفة الصور
+      image: images[0],        // للتوافق مع الكود القديم - الصورة الرئيسية
+      description, 
+      stock, 
+      featured 
+    };
     if (oldPrice) productData.oldPrice = oldPrice;
+    if (video) productData.video = video;
+    else productData.video = null; // مسح الفيديو إذا تم حذفه
     
     const ok = await saveProduct(productData, isEdit ? product.id : null);
     if (ok) {
