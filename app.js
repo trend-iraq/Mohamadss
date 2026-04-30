@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   storeName:'ترند العراق', tagline:'وجهتك الأولى للموضة والتقنية في العراق', city:'بغداد، العراق',
   whatsappNumber:'9647700000000', phoneDisplay:'07700000000',
   currency:'د.ع', freeShippingMin:50000, themeColor:'red', backgroundStyle:'cream',
+  storeTheme:'modern', // النمط الاحترافي للمتجر
   floatingWhatsappEnabled:true, floatingWhatsappPosition:'left',
   whatsappCheckoutEnabled:true, directCheckoutEnabled:true,
   heroEnabled:true, heroBadge:'🔥 التريند الآن في العراق', heroTitle:'اكتشف أحدث صيحات الموضة',
@@ -38,6 +39,35 @@ const BACKGROUNDS = {
   warm:{name:'دافئ',color:'#fff7ed'},
   cool:{name:'بارد',color:'#f8fafc'},
   dark:{name:'داكن',color:'#1c1917'},
+};
+
+// ===== ثيمات المتجر الاحترافية =====
+const STORE_THEMES = {
+  modern: {
+    name: 'عصري (افتراضي)',
+    icon: '✨',
+    description: 'تصميم عصري نظيف بزوايا ناعمة',
+  },
+  luxury: {
+    name: 'فاخر',
+    icon: '👑',
+    description: 'تصميم راقي بألوان ذهبية وخطوط أنيقة',
+  },
+  minimal: {
+    name: 'بسيط',
+    icon: '⚪',
+    description: 'تصميم بسيط نظيف يركز على المنتجات',
+  },
+  vibrant: {
+    name: 'حيوي',
+    icon: '🌈',
+    description: 'تصميم جريء بألوان متدرجة ومتحركة',
+  },
+  classic: {
+    name: 'كلاسيكي',
+    icon: '🏛️',
+    description: 'تصميم تقليدي رسمي مناسب للمتاجر الكبرى',
+  },
 };
 
 const CATEGORIES = [
@@ -317,6 +347,15 @@ function applyTheme() {
   root.style.setProperty('--primary-light', t.light);
   root.style.setProperty('--bg', bg.color);
   document.body.classList.toggle('dark-mode', state.settings.backgroundStyle === 'dark');
+  
+  // تطبيق نمط المتجر (الثيم)
+  const storeTheme = state.settings.storeTheme || 'modern';
+  // إزالة كل ثيمات سابقة
+  Object.keys(STORE_THEMES).forEach(key => {
+    document.body.classList.remove('theme-' + key);
+  });
+  // تطبيق الثيم الحالي
+  document.body.classList.add('theme-' + storeTheme);
   
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
   if (themeColorMeta) themeColorMeta.setAttribute('content', t.primary);
@@ -1736,8 +1775,30 @@ function renderAdminSettings() {
 function renderAdminTheme() {
   const s = { ...state.settings };
   const cur = THEMES[s.themeColor] || THEMES.red;
+  const curStoreTheme = s.storeTheme || 'modern';
   
   $('#adminContent').innerHTML = `
+    <div class="settings-card">
+      <h3>✨ نمط المتجر</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">اختر التصميم الذي يناسب علامتك التجارية</p>
+      <div class="store-themes-grid">
+        ${Object.entries(STORE_THEMES).map(([k, t]) => `
+          <button class="store-theme-card ${curStoreTheme === k ? 'active' : ''}" data-store-theme="${k}">
+            <div class="store-theme-preview store-theme-preview-${k}">
+              <div class="preview-header"></div>
+              <div class="preview-product"></div>
+              <div class="preview-product"></div>
+            </div>
+            <div class="store-theme-info">
+              <div class="store-theme-name">${t.icon} ${escapeHtml(t.name)}</div>
+              <div class="store-theme-desc">${escapeHtml(t.description)}</div>
+            </div>
+            ${curStoreTheme === k ? '<div class="store-theme-check">✓</div>' : ''}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+    
     <div class="settings-card">
       <h3>🎨 لون المتجر الأساسي</h3>
       <div class="color-grid">
@@ -1798,6 +1859,21 @@ function renderAdminTheme() {
     
     <button class="btn-save-all" id="saveTheme">💾 حفظ التصميم</button>
   `;
+  
+  document.querySelectorAll('[data-store-theme]').forEach(b => {
+    b.addEventListener('click', () => {
+      s.storeTheme = b.dataset.storeTheme;
+      document.querySelectorAll('[data-store-theme]').forEach(x => {
+        x.classList.remove('active');
+        const check = x.querySelector('.store-theme-check');
+        if (check) check.remove();
+      });
+      b.classList.add('active');
+      if (!b.querySelector('.store-theme-check')) {
+        b.insertAdjacentHTML('beforeend', '<div class="store-theme-check">✓</div>');
+      }
+    });
+  });
   
   document.querySelectorAll('[data-theme]').forEach(b => {
     b.addEventListener('click', () => {
