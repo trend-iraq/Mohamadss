@@ -14,7 +14,14 @@ const DEFAULT_SETTINGS = {
   storeName:'ترند العراق', tagline:'وجهتك الأولى للموضة والتقنية في العراق', city:'بغداد، العراق',
   whatsappNumber:'9647700000000', phoneDisplay:'07700000000',
   currency:'د.ع', freeShippingMin:50000, themeColor:'red', backgroundStyle:'cream',
-  storeTheme:'modern', // النمط الاحترافي للمتجر
+  storeTheme:'modern',
+  // أجور التوصيل
+  shippingEnabled: true,
+  shippingFee: 5000,           // أجور التوصيل الموحدة
+  freeShippingEnabled: true,    // تفعيل التوصيل المجاني فوق مبلغ معين
+  // التوصيل حسب المحافظة (اختياري)
+  shippingByGovernorate: false,
+  governorateShipping: {},      // { "بغداد": 3000, "البصرة": 7000, ... }
   floatingWhatsappEnabled:true, floatingWhatsappPosition:'left',
   whatsappCheckoutEnabled:true, directCheckoutEnabled:true,
   heroEnabled:true, heroBadge:'🔥 التريند الآن في العراق', heroTitle:'اكتشف أحدث صيحات الموضة',
@@ -70,11 +77,22 @@ const STORE_THEMES = {
   },
 };
 
-const CATEGORIES = [
-  {id:'all',name:'الكل',icon:'🛍️'},{id:'fashion',name:'الموضة',icon:'👕'},
-  {id:'electronics',name:'إلكترونيات',icon:'📱'},{id:'beauty',name:'العناية والجمال',icon:'💄'},
-  {id:'home',name:'المنزل',icon:'🏠'},{id:'kids',name:'الأطفال',icon:'🧸'},{id:'sports',name:'الرياضة',icon:'⚽'}
+const DEFAULT_CATEGORIES = [
+  {id:'fashion',name:'الموضة',icon:'👕'},
+  {id:'electronics',name:'إلكترونيات',icon:'📱'},
+  {id:'beauty',name:'العناية والجمال',icon:'💄'},
+  {id:'home',name:'المنزل',icon:'🏠'},
+  {id:'kids',name:'الأطفال',icon:'🧸'},
+  {id:'sports',name:'الرياضة',icon:'⚽'}
 ];
+
+// قائمة "الكل" تُضاف تلقائياً في كل عرض، ولا تُخزّن
+const ALL_CATEGORY = {id:'all',name:'الكل',icon:'🛍️'};
+
+// للوصول السريع (سيتم تعبئته من state.categories)
+function getAllCategories() {
+  return [ALL_CATEGORY, ...(state.categories || DEFAULT_CATEGORIES)];
+}
 
 const STATUS_MAP = {
   pending:{label:'قيد المعالجة',cls:'status-pending'},
@@ -89,6 +107,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   products: [],
   orders: [],
+  categories: [...DEFAULT_CATEGORIES],
   cart: [],
   category: 'all',
   search: '',
@@ -150,6 +169,32 @@ async function loadSettings() {
   } catch (err) {
     console.error('فشل تحميل الإعدادات:', err);
     state.settings = { ...DEFAULT_SETTINGS };
+  }
+}
+
+async function loadCategories() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'categories'));
+    if (snap.exists() && snap.data().list && snap.data().list.length > 0) {
+      state.categories = snap.data().list;
+    } else {
+      state.categories = [...DEFAULT_CATEGORIES];
+    }
+  } catch (err) {
+    console.error('فشل تحميل الأقسام:', err);
+    state.categories = [...DEFAULT_CATEGORIES];
+  }
+}
+
+async function saveCategories(list) {
+  try {
+    await setDoc(doc(db, 'settings', 'categories'), { list });
+    state.categories = list;
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast('فشل حفظ الأقسام', 'error');
+    return false;
   }
 }
 
@@ -288,6 +333,42 @@ function addToCart(product) {
   updateCartBadge();
 }
 
+// اطلب الآن: شراء سريع لمنتج واحد فقط (يتجاوز السلة)
+function buyNow(product) {
+  // حفظ السلة الحالية لاسترجاعها لاحقاً
+  state._savedCart = [...state.cart];
+  
+  // وضع المنتج فقط في السلة
+  const mainImage = (product.images && product.images[0]) || product.image || '';
+  state.cart = [{ 
+    id: product.id, 
+    name: product.name, 
+    price: product.price, 
+    image: mainImage, 
+    qty: 1 
+  }];
+  
+  // فتح خيارات الدفع مباشرة
+  const s = state.settings;
+  if (s.directCheckoutEnabled && !s.whatsappCheckoutEnabled) {
+    showDirectCheckout(true); // true = وضع اطلب الآن
+  } else if (!s.directCheckoutEnabled && s.whatsappCheckoutEnabled) {
+    checkoutWhatsApp();
+    restoreCart();
+  } else {
+    showCheckoutChoice(true); // true = وضع اطلب الآن
+  }
+}
+
+// استرجاع السلة بعد إلغاء الطلب السريع
+function restoreCart() {
+  if (state._savedCart) {
+    state.cart = state._savedCart;
+    delete state._savedCart;
+    updateCartBadge();
+  }
+}
+
 function updateCartQty(id, delta) {
   const item = state.cart.find(i => i.id === id);
   if (!item) return;
@@ -304,6 +385,28 @@ function removeFromCart(id) {
 
 function cartTotal() {
   return state.cart.reduce((s, i) => s + i.price * i.qty, 0);
+}
+
+// حساب أجور التوصيل
+function getShippingFee(governorate = '') {
+  const s = state.settings;
+  if (!s.shippingEnabled) return 0;
+  const subtotal = cartTotal();
+  // التوصيل المجاني فوق مبلغ معين
+  if (s.freeShippingEnabled && s.freeShippingMin > 0 && subtotal >= s.freeShippingMin) {
+    return 0;
+  }
+  // التوصيل حسب المحافظة
+  if (s.shippingByGovernorate && governorate && s.governorateShipping?.[governorate] !== undefined) {
+    return s.governorateShipping[governorate];
+  }
+  // التوصيل الموحّد
+  return s.shippingFee || 0;
+}
+
+// المجموع النهائي = المنتجات + الشحن
+function grandTotal(governorate = '') {
+  return cartTotal() + getShippingFee(governorate);
 }
 
 function cartCount() {
@@ -323,11 +426,22 @@ function updateCartBadge() {
 function checkoutWhatsApp(customerInfo = null) {
   if (state.cart.length === 0) return;
   const s = state.settings;
+  const subtotal = cartTotal();
+  const shipping = customerInfo ? getShippingFee(customerInfo.governorate) : (s.shippingEnabled ? s.shippingFee : 0);
+  const total = subtotal + shipping;
+  
   let msg = `🛍️ *طلب جديد من ${s.storeName}*\n\n`;
   state.cart.forEach((it, i) => {
     msg += `${i+1}. ${it.name}\n   ${it.qty} × ${formatPrice(it.price)} = ${formatPrice(it.price * it.qty)}\n\n`;
   });
-  msg += `\n💰 *الإجمالي: ${formatPrice(cartTotal())}*\n\n`;
+  msg += `\n💰 *المجموع: ${formatPrice(subtotal)}*\n`;
+  if (shipping > 0) {
+    msg += `🚚 *أجور التوصيل: ${formatPrice(shipping)}*\n`;
+  } else if (s.shippingEnabled) {
+    msg += `🚚 *التوصيل: مجاني* 🎉\n`;
+  }
+  msg += `💵 *الإجمالي: ${formatPrice(total)}*\n\n`;
+  
   if (customerInfo) {
     msg += `📋 *بيانات الزبون:*\nالاسم: ${customerInfo.name}\nالهاتف: ${customerInfo.phone}\nالمحافظة: ${customerInfo.governorate}\nالعنوان: ${customerInfo.address}\n`;
     if (customerInfo.notes) msg += `ملاحظات: ${customerInfo.notes}\n`;
@@ -397,7 +511,7 @@ function render() {
       </div>
       <div class="categories-bar">
         <div class="categories">
-          ${CATEGORIES.map(c => `
+          ${getAllCategories().map(c => `
             <button class="cat-btn ${state.category === c.id ? 'active' : ''}" data-cat="${c.id}">
               ${c.icon} ${escapeHtml(c.name)}
             </button>
@@ -460,7 +574,7 @@ function render() {
     
     <section class="section" id="products-section">
       <div class="section-header">
-        <h3>${state.search ? `نتائج: ${escapeHtml(state.search)}` : state.category === 'all' ? 'كل المنتجات' : escapeHtml(CATEGORIES.find(c => c.id === state.category)?.name || '')}</h3>
+        <h3>${state.search ? `نتائج: ${escapeHtml(state.search)}` : state.category === 'all' ? 'كل المنتجات' : escapeHtml(getAllCategories().find(c => c.id === state.category)?.name || '')}</h3>
         <span style="font-size:14px;color:var(--text-muted);">${filtered.length} منتج</span>
       </div>
       ${filtered.length === 0 ? `
@@ -531,7 +645,10 @@ function renderProductCard(p) {
           <span class="price-current">${formatPrice(p.price)}</span>
           ${p.oldPrice ? `<span class="price-old">${formatPrice(p.oldPrice)}</span>` : ''}
         </div>
-        <button class="btn-add-cart" data-product-id="${p.id}" data-action="add-cart">🛒 أضف للسلة</button>
+        <div class="product-buttons">
+          <button class="btn-buy-now" data-product-id="${p.id}" data-action="buy-now" title="اطلب الآن">⚡ اطلب</button>
+          <button class="btn-add-cart" data-product-id="${p.id}" data-action="add-cart" title="أضف للسلة">🛒</button>
+        </div>
       </div>
     </div>
   `;
@@ -562,6 +679,10 @@ function attachStoreEvents() {
         e.stopPropagation();
         const p = state.products.find(x => x.id === id);
         if (p) addToCart(p);
+      } else if (a === 'buy-now') {
+        e.stopPropagation();
+        const p = state.products.find(x => x.id === id);
+        if (p) buyNow(p);
       } else if (a === 'open-cart') {
         renderCart();
       } else if (a === 'admin-login') {
@@ -647,9 +768,14 @@ function showProductModal(p) {
               <p>✓ متوفر${p.stock ? ` • ${p.stock} قطعة` : ''}</p>
               <p class="small">💵 الدفع عند الاستلام • 🚚 توصيل لجميع المحافظات</p>
             </div>
-            <button class="btn-add-cart-large" data-add-from-modal="${p.id}">
-              🛒 أضف للسلة
-            </button>
+            <div class="product-detail-buttons">
+              <button class="btn-buy-now-large" data-buy-from-modal="${p.id}">
+                ⚡ اطلب الآن
+              </button>
+              <button class="btn-add-cart-large" data-add-from-modal="${p.id}">
+                🛒 أضف للسلة
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -666,6 +792,11 @@ function showProductModal(p) {
   $(`[data-add-from-modal="${p.id}"]`)?.addEventListener('click', () => {
     addToCart(p);
     closeModal();
+  });
+  
+  $(`[data-buy-from-modal="${p.id}"]`)?.addEventListener('click', () => {
+    closeModal();
+    buyNow(p);
   });
   
   // التحكم في المعرض - النقاط والمصغرات
@@ -779,13 +910,13 @@ function renderCart() {
   });
 }
 
-function showCheckoutChoice() {
+function showCheckoutChoice(isBuyNow = false) {
   closeModal();
   const html = `
     <div class="modal-overlay" data-overlay>
       <div class="modal" style="max-width:440px;">
         <div class="modal-header">
-          <h3>كيف تريد إكمال طلبك؟</h3>
+          <h3>${isBuyNow ? '⚡ كيف تريد الطلب؟' : 'كيف تريد إكمال طلبك؟'}</h3>
           <button class="close-btn" data-close>×</button>
         </div>
         <div class="checkout-choice">
@@ -815,20 +946,28 @@ function showCheckoutChoice() {
   document.body.insertAdjacentHTML('beforeend', html);
   
   document.querySelectorAll('[data-close], [data-overlay]').forEach(el => {
-    el.addEventListener('click', (e) => { if (e.target === el) closeModal(); });
+    el.addEventListener('click', (e) => { 
+      if (e.target === el) {
+        closeModal();
+        if (isBuyNow) restoreCart(); // استرجاع السلة عند الإلغاء
+      }
+    });
   });
   
   document.querySelectorAll('[data-choice]').forEach(b => {
     b.addEventListener('click', () => {
       const c = b.dataset.choice;
       closeModal();
-      if (c === 'direct') showDirectCheckout();
-      else checkoutWhatsApp();
+      if (c === 'direct') showDirectCheckout(isBuyNow);
+      else {
+        checkoutWhatsApp();
+        if (isBuyNow) restoreCart();
+      }
     });
   });
 }
 
-function showDirectCheckout() {
+function showDirectCheckout(isBuyNow = false) {
   closeModal();
   const total = cartTotal();
   const html = `
@@ -863,10 +1002,12 @@ function showDirectCheckout() {
             <textarea id="cNotes" rows="2" placeholder="أي ملاحظات إضافية..."></textarea>
           </div>
           <div id="checkoutError"></div>
-          <div class="order-summary">
+          <div class="order-summary" id="orderSummary">
             <div class="order-summary-row"><span>عدد المنتجات:</span><span><strong>${cartCount()}</strong></span></div>
+            <div class="order-summary-row"><span>المجموع:</span><span><strong>${formatPrice(total)}</strong></span></div>
+            <div class="order-summary-row" id="shippingRow"><span>أجور التوصيل:</span><span id="shippingValue"><strong>اختر المحافظة</strong></span></div>
             <div class="order-summary-row"><span>طريقة الدفع:</span><span><strong>عند الاستلام 💵</strong></span></div>
-            <div class="order-summary-row order-summary-total"><span>الإجمالي:</span><span class="price">${formatPrice(total)}</span></div>
+            <div class="order-summary-row order-summary-total"><span>الإجمالي:</span><span class="price" id="grandTotalValue">${formatPrice(total)}</span></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -878,8 +1019,44 @@ function showDirectCheckout() {
   document.body.insertAdjacentHTML('beforeend', html);
   
   document.querySelectorAll('[data-close], [data-overlay]').forEach(el => {
-    el.addEventListener('click', (e) => { if (e.target === el) closeModal(); });
+    el.addEventListener('click', (e) => { 
+      if (e.target === el) {
+        closeModal();
+        if (isBuyNow) restoreCart();
+      }
+    });
   });
+  
+  // تحديث أجور التوصيل عند تغيير المحافظة
+  function updateShippingDisplay() {
+    const gov = $('#cGov').value;
+    const s = state.settings;
+    const shippingEl = $('#shippingValue');
+    const grandEl = $('#grandTotalValue');
+    
+    if (!s.shippingEnabled) {
+      shippingEl.innerHTML = '<strong style="color:#16a34a;">مجاني 🎉</strong>';
+      grandEl.textContent = formatPrice(total);
+      return;
+    }
+    
+    if (!gov) {
+      shippingEl.innerHTML = '<strong>اختر المحافظة</strong>';
+      grandEl.textContent = formatPrice(total) + ' + التوصيل';
+      return;
+    }
+    
+    const shipping = getShippingFee(gov);
+    if (shipping === 0) {
+      shippingEl.innerHTML = '<strong style="color:#16a34a;">مجاني 🎉</strong>';
+    } else {
+      shippingEl.innerHTML = `<strong>${formatPrice(shipping)}</strong>`;
+    }
+    grandEl.textContent = formatPrice(total + shipping);
+  }
+  
+  $('#cGov').addEventListener('change', updateShippingDisplay);
+  updateShippingDisplay(); // عرض أولي
   
   $('#submitOrderBtn')?.addEventListener('click', async () => {
     const name = $('#cName').value.trim();
@@ -902,9 +1079,14 @@ function showDirectCheckout() {
     btn.disabled = true;
     btn.textContent = 'جاري الإرسال...';
     
+    const shipping = getShippingFee(gov);
+    const finalTotal = total + shipping;
+    
     const order = await createOrder({
       items: state.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image })),
-      total,
+      subtotal: total,
+      shipping: shipping,
+      total: finalTotal,
       customer: { name, phone, governorate: gov, address: addr, notes }
     });
     
@@ -1052,7 +1234,9 @@ function renderAdmin() {
               {id:'products',label:'المنتجات',icon:'📦'},
               {id:'orders',label:'الطلبات',icon:'🛒',badge:pendingCount},
               {id:'settings',label:'الإعدادات',icon:'⚙️'},
-              {id:'theme',label:'التصميم',icon:'🎨'}
+              {id:'theme',label:'التصميم',icon:'🎨'},
+              {id:'categories',label:'الأقسام',icon:'📂'},
+              {id:'shipping',label:'التوصيل',icon:'🚚'}
             ].map(t => `
               <button class="admin-tab ${adminTab === t.id ? 'active' : ''}" data-admin-tab="${t.id}">
                 ${t.icon} ${t.label}
@@ -1085,6 +1269,8 @@ function renderAdmin() {
   else if (adminTab === 'orders') renderAdminOrders();
   else if (adminTab === 'settings') renderAdminSettings();
   else if (adminTab === 'theme') renderAdminTheme();
+  else if (adminTab === 'categories') renderAdminCategories();
+  else if (adminTab === 'shipping') renderAdminShipping();
 }
 
 function renderAdminDashboard() {
@@ -1187,7 +1373,7 @@ function renderAdminProducts() {
               <div class="product-meta">
                 <span class="price-tag">${formatPrice(p.price)}</span>
                 <span>•</span>
-                <span>${escapeHtml(CATEGORIES.find(c => c.id === p.category)?.name || '')}</span>
+                <span>${escapeHtml(getAllCategories().find(c => c.id === p.category)?.name || '')}</span>
                 <span>•</span>
                 <span>المخزون: ${p.stock || 0}</span>
               </div>
@@ -1298,7 +1484,7 @@ function showProductForm(product) {
             <div class="form-group">
               <label>التصنيف</label>
               <select id="pCategory">
-                ${CATEGORIES.filter(c => c.id !== 'all').map(c => `
+                ${state.categories.map(c => `
                   <option value="${c.id}" ${data.category === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>
                 `).join('')}
               </select>
@@ -1594,7 +1780,17 @@ function showOrderDetail(order) {
                 <div class="item-total">${formatPrice(i.price * i.qty)}</div>
               </div>
             `).join('')}
-            <div class="order-summary-row order-summary-total" style="margin-top:12px;padding-top:12px;border-top:2px solid var(--border);">
+            ${order.shipping !== undefined ? `
+              <div class="order-summary-row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                <span>المجموع:</span>
+                <span><strong>${formatPrice(order.subtotal || order.total)}</strong></span>
+              </div>
+              <div class="order-summary-row">
+                <span>أجور التوصيل:</span>
+                <span><strong>${order.shipping > 0 ? formatPrice(order.shipping) : 'مجاني 🎉'}</strong></span>
+              </div>
+            ` : ''}
+            <div class="order-summary-row order-summary-total" style="margin-top:8px;padding-top:8px;border-top:2px solid var(--border);">
               <span>الإجمالي:</span>
               <span class="price" style="color:var(--primary);font-size:18px;font-weight:900;">${formatPrice(order.total)}</span>
             </div>
@@ -1666,16 +1862,15 @@ function renderAdminSettings() {
         <label>المدينة / العنوان</label>
         <input type="text" id="setCity" value="${escapeHtml(s.city)}" />
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr;gap:12px;">
         <div class="form-group">
           <label>رمز العملة</label>
           <input type="text" id="setCurrency" value="${escapeHtml(s.currency)}" />
         </div>
-        <div class="form-group">
-          <label>حد التوصيل المجاني</label>
-          <input type="number" id="setFreeShipping" value="${s.freeShippingMin}" />
-        </div>
       </div>
+      <p style="font-size:12px;color:var(--text-muted);background:var(--primary-light);padding:8px;border-radius:8px;">
+        💡 إعدادات التوصيل والأقسام لها تبويبات مستقلة الآن في القائمة العلوية
+      </p>
     </div>
     
     <div class="settings-card">
@@ -1754,7 +1949,6 @@ function renderAdminSettings() {
     s.tagline = $('#setTagline').value.trim();
     s.city = $('#setCity').value.trim();
     s.currency = $('#setCurrency').value.trim();
-    s.freeShippingMin = parseInt($('#setFreeShipping').value) || 0;
     s.whatsappNumber = $('#setWaNumber').value.trim();
     s.phoneDisplay = $('#setPhoneDisplay').value.trim();
     
@@ -1924,6 +2118,296 @@ function renderAdminTheme() {
   });
 }
 
+// ===== إدارة الأقسام =====
+function renderAdminCategories() {
+  const cats = state.categories || [];
+  
+  $('#adminContent').innerHTML = `
+    <div class="settings-card">
+      <h3>📂 أقسام المتجر</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+        أضف أو احذف أو رتّب أقسام منتجاتك. القسم "الكل" يظهر تلقائياً ولا يمكن حذفه.
+      </p>
+      
+      <div id="categoriesList" class="categories-admin-list">
+        ${cats.map((c, i) => `
+          <div class="category-row" data-cat-index="${i}">
+            <div class="category-emoji-wrapper">
+              <input type="text" class="category-emoji-input" data-cat-emoji="${i}" value="${escapeHtml(c.icon)}" maxlength="4" />
+            </div>
+            <input type="text" class="category-name-input" data-cat-name="${i}" value="${escapeHtml(c.name)}" placeholder="اسم القسم" />
+            <div class="category-actions">
+              <button class="cat-action-btn" data-cat-up="${i}" ${i === 0 ? 'disabled' : ''} title="تحريك للأعلى">↑</button>
+              <button class="cat-action-btn" data-cat-down="${i}" ${i === cats.length - 1 ? 'disabled' : ''} title="تحريك للأسفل">↓</button>
+              <button class="cat-action-btn cat-delete" data-cat-delete="${i}" title="حذف">🗑️</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      
+      <button class="btn-add-product" id="addNewCategory" style="width:100%;margin-top:12px;">
+        + إضافة قسم جديد
+      </button>
+    </div>
+    
+    <div class="settings-card" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #fcd34d;">
+      <h3 style="color:#92400e;">💡 نصائح</h3>
+      <ul style="padding:0;list-style:none;font-size:13px;line-height:2;color:#78350f;">
+        <li>• استخدم رموز تعبيرية (إيموجي) للأيقونات لجذب الانتباه</li>
+        <li>• الترتيب في القائمة هو نفس الترتيب الذي يراه الزبون</li>
+        <li>• عند حذف قسم، المنتجات المرتبطة به تبقى لكن تصبح بدون تصنيف</li>
+        <li>• اضغط على الأسهم ↑↓ لتغيير ترتيب الأقسام</li>
+      </ul>
+    </div>
+    
+    <button class="btn-save-all" id="saveCategoriesBtn">💾 حفظ الأقسام</button>
+  `;
+  
+  // متغير محلي للأقسام (للتعديل قبل الحفظ)
+  let editingCats = [...cats];
+  
+  function rerender() {
+    state.categories = editingCats; // تحديث مؤقت للعرض
+    renderAdminCategories();
+  }
+  
+  // إضافة قسم جديد
+  $('#addNewCategory').addEventListener('click', () => {
+    const id = 'cat_' + Date.now();
+    editingCats.push({ id, name: 'قسم جديد', icon: '📦' });
+    state.categories = editingCats;
+    renderAdminCategories();
+  });
+  
+  // حذف قسم
+  document.querySelectorAll('[data-cat-delete]').forEach(b => {
+    b.addEventListener('click', () => {
+      const idx = parseInt(b.dataset.catDelete);
+      const cat = editingCats[idx];
+      if (!confirm(`حذف قسم "${cat.name}"؟`)) return;
+      editingCats.splice(idx, 1);
+      state.categories = editingCats;
+      renderAdminCategories();
+    });
+  });
+  
+  // تحريك للأعلى
+  document.querySelectorAll('[data-cat-up]').forEach(b => {
+    b.addEventListener('click', () => {
+      const idx = parseInt(b.dataset.catUp);
+      if (idx === 0) return;
+      [editingCats[idx-1], editingCats[idx]] = [editingCats[idx], editingCats[idx-1]];
+      state.categories = editingCats;
+      renderAdminCategories();
+    });
+  });
+  
+  // تحريك للأسفل
+  document.querySelectorAll('[data-cat-down]').forEach(b => {
+    b.addEventListener('click', () => {
+      const idx = parseInt(b.dataset.catDown);
+      if (idx >= editingCats.length - 1) return;
+      [editingCats[idx], editingCats[idx+1]] = [editingCats[idx+1], editingCats[idx]];
+      state.categories = editingCats;
+      renderAdminCategories();
+    });
+  });
+  
+  // تحديث الإيموجي والاسم في الذاكرة
+  document.querySelectorAll('[data-cat-emoji]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(input.dataset.catEmoji);
+      editingCats[idx].icon = e.target.value;
+    });
+  });
+  document.querySelectorAll('[data-cat-name]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(input.dataset.catName);
+      editingCats[idx].name = e.target.value;
+    });
+  });
+  
+  // حفظ
+  $('#saveCategoriesBtn').addEventListener('click', async () => {
+    // التحقق من صحة البيانات
+    const cleaned = editingCats.filter(c => c.name && c.name.trim()).map(c => ({
+      id: c.id || 'cat_' + Date.now() + Math.random(),
+      name: c.name.trim(),
+      icon: (c.icon || '📦').trim() || '📦'
+    }));
+    
+    if (cleaned.length === 0) {
+      showToast('يجب أن يكون هناك قسم واحد على الأقل', 'error');
+      return;
+    }
+    
+    const btn = $('#saveCategoriesBtn');
+    btn.disabled = true;
+    btn.textContent = 'جاري الحفظ...';
+    
+    const ok = await saveCategories(cleaned);
+    if (ok) {
+      showToast('✓ تم حفظ الأقسام');
+      btn.disabled = false;
+      btn.textContent = '💾 حفظ الأقسام';
+    } else {
+      btn.disabled = false;
+      btn.textContent = '💾 حفظ الأقسام';
+    }
+  });
+}
+
+// ===== إدارة أجور التوصيل =====
+function renderAdminShipping() {
+  const s = { ...state.settings };
+  
+  $('#adminContent').innerHTML = `
+    <div class="settings-card">
+      <h3>🚚 إعدادات التوصيل</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+        تحكم في أجور التوصيل التي تُضاف لكل طلب
+      </p>
+      
+      <div class="toggle-row">
+        <div class="toggle-row-info">
+          <p>تفعيل أجور التوصيل</p>
+          <p class="desc">إذا كان معطّلاً، التوصيل مجاني لكل الطلبات</p>
+        </div>
+        <button class="toggle ${s.shippingEnabled ? 'on' : ''}" data-shipping-toggle="shippingEnabled"></button>
+      </div>
+      
+      <div id="shippingDetails" style="display:${s.shippingEnabled ? 'block' : 'none'};">
+        <div class="toggle-row" style="margin-top:12px;">
+          <div class="toggle-row-info">
+            <p>تكلفة موحدة لكل المحافظات</p>
+            <p class="desc">مبلغ واحد للجميع (أبسط)</p>
+          </div>
+          <button class="toggle ${!s.shippingByGovernorate ? 'on' : ''}" id="modeUnified"></button>
+        </div>
+        
+        <div id="unifiedMode" style="display:${!s.shippingByGovernorate ? 'block' : 'none'};margin-top:12px;">
+          <div class="form-group">
+            <label>أجور التوصيل (لكل طلب)</label>
+            <input type="number" id="setShippingFee" value="${s.shippingFee}" placeholder="5000" />
+          </div>
+        </div>
+        
+        <div class="toggle-row" style="margin-top:12px;">
+          <div class="toggle-row-info">
+            <p>تكلفة مختلفة لكل محافظة</p>
+            <p class="desc">حدّد مبلغ خاص لكل محافظة</p>
+          </div>
+          <button class="toggle ${s.shippingByGovernorate ? 'on' : ''}" id="modeByGov"></button>
+        </div>
+        
+        <div id="byGovMode" style="display:${s.shippingByGovernorate ? 'block' : 'none'};margin-top:12px;">
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
+            اترك المحافظة فارغة لتستخدم التكلفة الموحدة (${formatPrice(s.shippingFee)})
+          </p>
+          <div class="gov-shipping-list">
+            ${IRAQI_GOVERNORATES.map(g => `
+              <div class="gov-shipping-row">
+                <label>${escapeHtml(g)}</label>
+                <input type="number" data-gov="${escapeHtml(g)}" value="${s.governorateShipping?.[g] !== undefined ? s.governorateShipping[g] : ''}" placeholder="${s.shippingFee}" />
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="settings-divider" style="margin-top:16px;"></div>
+        
+        <div class="toggle-row">
+          <div class="toggle-row-info">
+            <p>توصيل مجاني للطلبات الكبيرة</p>
+            <p class="desc">احذف أجور التوصيل عند تجاوز مبلغ معيّن</p>
+          </div>
+          <button class="toggle ${s.freeShippingEnabled ? 'on' : ''}" data-shipping-toggle="freeShippingEnabled"></button>
+        </div>
+        
+        <div id="freeShippingMin" style="display:${s.freeShippingEnabled ? 'block' : 'none'};margin-top:12px;">
+          <div class="form-group">
+            <label>الحد الأدنى للتوصيل المجاني</label>
+            <input type="number" id="setFreeShippingMin" value="${s.freeShippingMin}" placeholder="50000" />
+            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">عند تجاوز هذا المبلغ، التوصيل مجاني</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="settings-card" style="background:linear-gradient(135deg,#dbeafe,#e0e7ff);border:1px solid #bfdbfe;">
+      <h3 style="color:#1e40af;">📊 معاينة</h3>
+      <p style="font-size:13px;line-height:1.8;color:#1e3a8a;" id="shippingPreview">
+        ${s.shippingEnabled ? 
+          (s.shippingByGovernorate ? 
+            'التوصيل حسب المحافظة' :
+            `التوصيل: ${formatPrice(s.shippingFee)} لكل طلب`) +
+          (s.freeShippingEnabled ? `<br>توصيل مجاني للطلبات فوق ${formatPrice(s.freeShippingMin)}` : '')
+          : 'التوصيل مجاني لجميع الطلبات 🎉'}
+      </p>
+    </div>
+    
+    <button class="btn-save-all" id="saveShippingBtn">💾 حفظ إعدادات التوصيل</button>
+  `;
+  
+  // toggles عامة
+  document.querySelectorAll('[data-shipping-toggle]').forEach(b => {
+    b.addEventListener('click', () => {
+      const key = b.dataset.shippingToggle;
+      s[key] = !s[key];
+      b.classList.toggle('on', s[key]);
+      if (key === 'shippingEnabled') $('#shippingDetails').style.display = s[key] ? 'block' : 'none';
+      if (key === 'freeShippingEnabled') $('#freeShippingMin').style.display = s[key] ? 'block' : 'none';
+    });
+  });
+  
+  // اختيار النمط (موحد / حسب المحافظة)
+  $('#modeUnified').addEventListener('click', () => {
+    s.shippingByGovernorate = false;
+    $('#modeUnified').classList.add('on');
+    $('#modeByGov').classList.remove('on');
+    $('#unifiedMode').style.display = 'block';
+    $('#byGovMode').style.display = 'none';
+  });
+  
+  $('#modeByGov').addEventListener('click', () => {
+    s.shippingByGovernorate = true;
+    $('#modeByGov').classList.add('on');
+    $('#modeUnified').classList.remove('on');
+    $('#byGovMode').style.display = 'block';
+    $('#unifiedMode').style.display = 'none';
+  });
+  
+  // حفظ
+  $('#saveShippingBtn').addEventListener('click', async () => {
+    s.shippingFee = parseInt($('#setShippingFee')?.value) || 0;
+    s.freeShippingMin = parseInt($('#setFreeShippingMin')?.value) || 0;
+    
+    // جمع تكاليف المحافظات
+    const govShipping = {};
+    document.querySelectorAll('[data-gov]').forEach(input => {
+      const val = input.value.trim();
+      if (val !== '') {
+        govShipping[input.dataset.gov] = parseInt(val) || 0;
+      }
+    });
+    s.governorateShipping = govShipping;
+    
+    const btn = $('#saveShippingBtn');
+    btn.disabled = true;
+    btn.textContent = 'جاري الحفظ...';
+    
+    const ok = await saveSettings(s);
+    if (ok) {
+      showToast('✓ تم حفظ إعدادات التوصيل');
+      btn.disabled = false;
+      btn.textContent = '💾 حفظ إعدادات التوصيل';
+    } else {
+      btn.disabled = false;
+      btn.textContent = '💾 حفظ إعدادات التوصيل';
+    }
+  });
+}
+
 // ===== التهيئة =====
 async function init() {
   // مراقبة حالة تسجيل الدخول
@@ -1946,8 +2430,9 @@ async function init() {
     }
   });
   
-  // تحميل الإعدادات
+  // تحميل الإعدادات والأقسام
   await loadSettings();
+  await loadCategories();
   
   // إذا لم يكن هناك مستخدم، حمل المنتجات وارسم المتجر
   if (!state.user) {
