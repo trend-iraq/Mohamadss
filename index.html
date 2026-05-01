@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="description" content="ترند العراق - متجرك الأول للموضة والتقنية" />
+  <meta name="theme-color" content="#dc2626" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>ترند العراق - متجرك الأول</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+  
+  <link rel="icon" type="image/webp" href="assets/logo.webp" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ترند العراق" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  
+  <!-- تحميل الملفات بـ timestamp ديناميكي لتجاوز الكاش -->
+  <script>
+    (function() {
+      const v = Date.now();
+      // تحميل styles.css ديناميكياً
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'styles.css?v=' + v;
+      document.head.appendChild(link);
+      // حفظ النسخة لاستخدامها في app.js
+      window._cacheVersion = v;
+    })();
+  </script>
+</head>
+<body>
+  <!-- شاشة الترحيب -->
+  <div id="loadingScreen" class="welcome-screen">
+    <div class="welcome-bg-pattern"></div>
+    <div class="welcome-content">
+      <div class="welcome-logo-wrapper">
+        <div class="welcome-glow"></div>
+        <img src="assets/logo.webp" alt="ترند العراق" class="welcome-logo" />
+      </div>
+      <h1 class="welcome-title">ترند العراق</h1>
+      <p class="welcome-subtitle">TREND IRAQ</p>
+      <div class="welcome-tagline">وجهتك الأولى للتسوق</div>
+      <div class="welcome-loader">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- التطبيق -->
+  <div id="app" style="display:none;"></div>
+
+  <!-- Firebase SDKs مع timestamp ديناميكي -->
+  <script>
+    (function() {
+      const v = window._cacheVersion || Date.now();
+      const s1 = document.createElement('script');
+      s1.type = 'module';
+      s1.src = 'firebase-config.js?v=' + v;
+      document.body.appendChild(s1);
+      const s2 = document.createElement('script');
+      s2.type = 'module';
+      s2.src = 'app.js?v=' + v;
+      document.body.appendChild(s2);
+    })();
+  </script>
+</body>
+</html>
