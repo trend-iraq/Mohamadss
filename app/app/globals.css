@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #050a0f;
+  --bg-secondary: #0d1520;
+  --bg-card: #0f1e2e;
+  --neon-green: #00ff88;
+  --neon-blue: #00d4ff;
+  --neon-glow: #00ff8844;
+  --text-primary: #e8f4ff;
+  --text-muted: #7fa8c0;
+  --border-color: #1a3a5c;
+  --accent: #00ff88;
+}
+
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Cairo', 'Tajawal', 'Segoe UI', Arial, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-blue);
+}
+
+/* Neon glow effect */
+.neon-text {
+  color: var(--neon-green);
+  text-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+}
+
+.neon-border {
+  border: 1px solid var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-glow), inset 0 0 10px var(--neon-glow);
+}
+
+.glass-card {
+  background: rgba(13, 21, 32, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(26, 58, 92, 0.5);
+  border-radius: 12px;
+}
+
+.gradient-border {
+  background: linear-gradient(135deg, #0d1520, #0f1e2e);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  position: relative;
+}
+
+.btn-neon {
+  background: linear-gradient(135deg, #00ff88, #00d4ff);
+  color: #050a0f;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+}
+
+.btn-neon:hover {
+  box-shadow: 0 6px 25px rgba(0, 255, 136, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--neon-green);
+  border: 1px solid var(--neon-green);
+  border-radius: 8px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+  background: rgba(0, 255, 136, 0.1);
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+/* Input styles */
+.input-dark {
+  background: rgba(13, 21, 32, 0.9);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+  transition: border-color 0.3s ease;
+  outline: none;
+  direction: rtl;
+}
+
+.input-dark:focus {
+  border-color: var(--neon-green);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+}
+
+.input-dark::placeholder {
+  color: var(--text-muted);
+}
+
+/* Product card */
+.product-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.product-card:hover {
+  border-color: var(--neon-green);
+  box-shadow: 0 8px 30px rgba(0, 255, 136, 0.15);
+  transform: translateY(-4px);
+}
+
+/* Admin sidebar */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sidebar-item:hover,
+.sidebar-item.active {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--neon-green);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-neon {
+  0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(0, 255, 136, 0.6); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease forwards;
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Print styles */
+@media print {
+  body { background: white; color: black; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+}
+
+/* Whatsapp float */
+.whatsapp-float {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 999;
+  width: 56px;
+  height: 56px;
+  background: #25d366;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.5);
+  animation: pulse-neon 2s infinite;
+  transition: transform 0.3s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.whatsapp-float:hover {
+  transform: scale(1.1);
+}
+
+/* Table */
+.dark-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dark-table th {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--neon-green);
+  padding: 12px 16px;
+  text-align: right;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dark-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(26, 58, 92, 0.3);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.dark-table tr:hover td {
+  background: rgba(13, 21, 32, 0.5);
+}
+
+/* Cart quantity controls */
+.qty-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  color: var(--neon-green);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.qty-btn:hover {
+  background: rgba(0, 255, 136, 0.3);
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  padding: 16px;
+}
+
+.modal-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  animation: fadeIn 0.3s ease;
+}
