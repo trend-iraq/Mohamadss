@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
@@ -10,4 +10,4 @@ RUN npm run build
 
 ENV NODE_ENV=production
 
-CMD node_modules/.bin/next start -p $PORT
+CMD ["node", "server.js"]
