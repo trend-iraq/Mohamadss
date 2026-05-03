@@ -78,7 +78,7 @@ export default function StorePage() {
             borderRadius: 50, padding: '6px 16px',
             color: '#00ff88', fontSize: 13, marginBottom: 16
           }}>
-            📍 بغداد - السنك - مقابل أمانة بغداد
+            📍 بغداد ساحة الوثبة مقابل أمانة بغداد
           </div>
           <h1 style={{
             fontSize: 'clamp(28px, 5vw, 48px)',

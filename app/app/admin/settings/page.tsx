@@ -21,7 +21,7 @@ export default function AdminSettingsPage() {
         setSettings(prev => ({
           whatsapp_number: s.whatsapp_number ?? prev.whatsapp_number,
           store_name: s.store_name ?? 'المجمع الصيني للاكسسوارات',
-          store_address: s.store_address ?? 'بغداد - السنك - مقابل أمانة بغداد',
+          store_address: s.store_address ?? 'بغداد ساحة الوثبة مقابل أمانة بغداد',
           store_phone: s.store_phone ?? prev.store_phone,
         }))
       })
@@ -77,7 +77,7 @@ export default function AdminSettingsPage() {
     {
       key: 'store_address',
       label: 'عنوان المتجر',
-      placeholder: 'بغداد - السنك - مقابل أمانة بغداد',
+      placeholder: 'بغداد ساحة الوثبة مقابل أمانة بغداد',
       icon: '📍',
       hint: 'العنوان الذي يظهر في صفحة المنتجات',
       dir: undefined,
