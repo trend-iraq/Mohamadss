@@ -110,8 +110,8 @@ export default function StorePage() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 20,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
+            gap: 16,
           }}>
             {filtered.map(product => {
               const imgs = parseImages(product.images)

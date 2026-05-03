@@ -25,6 +25,8 @@
 html {
   direction: rtl;
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
@@ -33,6 +35,7 @@ body {
   font-family: 'Cairo', 'Tajawal', 'Segoe UI', Arial, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* Scrollbar */
@@ -209,11 +212,11 @@ body {
 /* Whatsapp float */
 .whatsapp-float {
   position: fixed;
-  bottom: 24px;
-  left: 24px;
+  bottom: 20px;
+  inset-inline-start: 16px;
   z-index: 999;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   background: #25d366;
   border-radius: 50%;
   display: flex;
@@ -310,4 +313,9 @@ body {
 }
 @media (min-width: 769px) {
   .admin-drawer { display: none !important; }
+}
+
+/* ===== Mobile Store ===== */
+@media (max-width: 480px) {
+  .product-card { width: 100% !important; max-width: 100% !important; }
 }
