@@ -64,7 +64,7 @@ export default function StorePage() {
             borderRadius: 50, padding: '6px 16px',
             color: '#00ff88', fontSize: 13, marginBottom: 16
           }}>
-            📍 بغداد - الصنك - قرب ساحة الخيلاني
+            📍 بغداد - السنك - مقابل أمانة بغداد
           </div>
           <h1 style={{
             fontSize: 'clamp(28px, 5vw, 48px)',
@@ -193,19 +193,6 @@ export default function StorePage() {
                       </span>
                     </div>
 
-                    {product.minOrder > 1 && (
-                      <div style={{
-                        background: 'rgba(0,212,255,0.08)',
-                        border: '1px solid rgba(0,212,255,0.2)',
-                        borderRadius: 6,
-                        padding: '4px 10px',
-                        fontSize: 12, color: '#00d4ff',
-                        marginBottom: 10,
-                        textAlign: 'center',
-                      }}>
-                        الحد الأدنى للطلب: {product.minOrder} قطعة
-                      </div>
-                    )}
 
                     <button
                       onClick={() => handleAdd(product)}
