@@ -31,6 +31,7 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
@@ -61,20 +62,24 @@ export default function AdminProductsPage() {
     setShowModal(true)
   }
 
-  const openEdit = (p: Product) => {
+  const openEdit = async (p: Product) => {
     setEditProduct(p)
-    setForm({
-      name: p.name,
-      description: p.description || '',
-      price: String(p.price),
-      stock: String(p.stock),
-      minOrder: String(p.minOrder),
-      images: parseImages(p.images),
-      video: p.video || '',
-      isActive: p.isActive,
-      categoryId: p.categoryId || '',
-    })
     setShowModal(true)
+    // Fetch full product data (list returns only first image)
+    const res = await fetch(`/api/products/${p.id}`)
+    const data = await res.json()
+    const full = data.product || p
+    setForm({
+      name: full.name,
+      description: full.description || '',
+      price: String(full.price),
+      stock: String(full.stock),
+      minOrder: String(full.minOrder),
+      images: parseImages(full.images),
+      video: full.video || '',
+      isActive: full.isActive,
+      categoryId: full.categoryId || '',
+    })
   }
 
   const handleUpload = async (files: FileList, type: 'image' | 'video') => {
@@ -96,6 +101,7 @@ export default function AdminProductsPage() {
 
   const handleSave = async () => {
     setSaving(true)
+    setError(null)
     const body = {
       name: form.name,
       description: form.description,
@@ -117,8 +123,13 @@ export default function AdminProductsPage() {
       if (res.ok) {
         setShowModal(false)
         load()
+      } else {
+        const d = await res.json()
+        setError(d.error || 'فشل الحفظ')
       }
-    } catch { /* empty */ }
+    } catch {
+      setError('خطأ في الاتصال بالخادم')
+    }
     setSaving(false)
   }
 
@@ -380,6 +391,11 @@ export default function AdminProductsPage() {
                   {saving ? 'جاري الحفظ...' : editProduct ? 'حفظ التعديلات' : 'إضافة المنتج'}
                 </button>
               </div>
+              {error && (
+                <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(255,59,48,0.12)', border: '1px solid rgba(255,59,48,0.3)', borderRadius: 8, color: '#ff6b6b', fontSize: 13, textAlign: 'center' }}>
+                  ⚠️ {error}
+                </div>
+              )}
             </div>
           </div>
         </div>

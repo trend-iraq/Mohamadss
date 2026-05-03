@@ -19,7 +19,7 @@ export async function PUT(
   try {
     await requireAdmin()
     const { id } = await params
-    const { name, description, price, stock, minOrder, images, video, isActive } = await request.json()
+    const { name, description, price, stock, minOrder, images, video, isActive, categoryId } = await request.json()
 
     const product = await prisma.product.update({
       where: { id },
@@ -32,6 +32,7 @@ export async function PUT(
         ...(images !== undefined && { images: JSON.stringify(images) }),
         ...(video !== undefined && { video }),
         ...(isActive !== undefined && { isActive }),
+        ...(categoryId !== undefined && { categoryId: categoryId || null }),
       },
     })
 

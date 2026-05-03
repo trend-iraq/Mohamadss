@@ -12,6 +12,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -31,6 +32,7 @@ export default function AdminSettingsPage() {
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveError(null)
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -40,8 +42,13 @@ export default function AdminSettingsPage() {
       if (res.ok) {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
+      } else {
+        const d = await res.json()
+        setSaveError(d.error || 'فشل الحفظ')
       }
-    } catch { /* empty */ }
+    } catch {
+      setSaveError('خطأ في الاتصال بالخادم')
+    }
     setSaving(false)
   }
 
@@ -125,11 +132,13 @@ export default function AdminSettingsPage() {
             {saving ? 'جاري الحفظ...' : '💾 حفظ الإعدادات'}
           </button>
           {saved && (
-            <span style={{
-              color: '#00ff88', fontSize: 14, fontWeight: 600,
-              animation: 'fadeIn 0.3s ease',
-            }}>
+            <span style={{ color: '#00ff88', fontSize: 14, fontWeight: 600 }}>
               ✓ تم الحفظ بنجاح
+            </span>
+          )}
+          {saveError && (
+            <span style={{ color: '#ff6b6b', fontSize: 13 }}>
+              ⚠️ {saveError}
             </span>
           )}
         </div>

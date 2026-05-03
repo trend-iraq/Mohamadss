@@ -16,13 +16,25 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: 'desc' },
   })
 
-  return Response.json({ products })
+  // Strip heavy base64 image data from list — return only first image
+  const lightProducts = products.map(p => {
+    try {
+      const imgs: string[] = JSON.parse(p.images || '[]')
+      return { ...p, images: JSON.stringify(imgs.slice(0, 1)) }
+    } catch {
+      return { ...p, images: '[]' }
+    }
+  })
+
+  return Response.json({ products: lightProducts }, {
+    headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' },
+  })
 }
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin()
-    const { name, description, price, stock, minOrder, images, video } = await request.json()
+    const { name, description, price, stock, minOrder, images, video, categoryId } = await request.json()
 
     if (!name || price === undefined) {
       return Response.json({ error: 'الاسم والسعر مطلوبان' }, { status: 400 })
@@ -37,6 +49,7 @@ export async function POST(request: NextRequest) {
         minOrder: Number(minOrder) || 1,
         images: JSON.stringify(images || []),
         video: video || null,
+        categoryId: categoryId || null,
       },
     })
 
