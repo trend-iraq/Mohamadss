@@ -7,18 +7,25 @@ export async function POST(request: NextRequest) {
   try {
     const { name, email, password, phone } = await request.json()
 
-    if (!name || !email || !password) {
-      return Response.json({ error: 'جميع الحقول مطلوبة' }, { status: 400 })
+    if (!name || !phone || !password) {
+      return Response.json({ error: 'الاسم ورقم الهاتف وكلمة المرور مطلوبة' }, { status: 400 })
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } })
-    if (existing) {
+    const existingPhone = await prisma.user.findFirst({ where: { phone } })
+    if (existingPhone) {
+      return Response.json({ error: 'رقم الهاتف مستخدم مسبقاً' }, { status: 400 })
+    }
+
+    const finalEmail = email?.trim() || `phone_${phone}@noemail.local`
+
+    const existingEmail = await prisma.user.findUnique({ where: { email: finalEmail } })
+    if (existingEmail) {
       return Response.json({ error: 'البريد الإلكتروني مستخدم مسبقاً' }, { status: 400 })
     }
 
     const hashed = await hashPassword(password)
     const user = await prisma.user.create({
-      data: { name, email, password: hashed, phone, role: 'customer' },
+      data: { name, email: finalEmail, password: hashed, phone, role: 'customer' },
     })
 
     const token = signToken({ userId: user.id, email: user.email, role: user.role })

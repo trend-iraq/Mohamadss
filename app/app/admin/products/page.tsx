@@ -3,6 +3,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { formatCurrency, parseImages, getStockStatus } from '@/lib/utils'
 
+interface Category {
+  id: string
+  name: string
+  icon: string | null
+}
+
 interface Product {
   id: string
   name: string
@@ -13,15 +19,17 @@ interface Product {
   images: string
   video?: string
   isActive: boolean
+  categoryId: string | null
 }
 
 const emptyForm = {
   name: '', description: '', price: '', stock: '', minOrder: '1',
-  images: [] as string[], video: '', isActive: true
+  images: [] as string[], video: '', isActive: true, categoryId: '',
 }
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
@@ -36,11 +44,13 @@ export default function AdminProductsPage() {
 
   const load = () => {
     setLoading(true)
-    fetch('/api/products?admin=true')
-      .then(r => r.json())
-      .then(d => setProducts(d.products || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetch('/api/products?admin=true').then(r => r.json()),
+      fetch('/api/categories').then(r => r.json()),
+    ]).then(([pd, cd]) => {
+      setProducts(pd.products || [])
+      setCategories(cd.categories || [])
+    }).catch(() => {}).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -62,6 +72,7 @@ export default function AdminProductsPage() {
       images: parseImages(p.images),
       video: p.video || '',
       isActive: p.isActive,
+      categoryId: p.categoryId || '',
     })
     setShowModal(true)
   }
@@ -94,6 +105,7 @@ export default function AdminProductsPage() {
       images: form.images,
       video: form.video || null,
       isActive: form.isActive,
+      categoryId: form.categoryId || null,
     }
     try {
       const url = editProduct ? `/api/products/${editProduct.id}` : '/api/products'
@@ -258,6 +270,23 @@ export default function AdminProductsPage() {
                   onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                   placeholder="وصف المنتج..." style={{ resize: 'vertical' }} />
               </div>
+
+              {/* Category */}
+              {categories.length > 0 && (
+                <div>
+                  <label style={{ color: '#7fa8c0', fontSize: 13, display: 'block', marginBottom: 6 }}>القسم</label>
+                  <select className="input-dark" value={form.categoryId}
+                    onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))}
+                    style={{ cursor: 'pointer' }}>
+                    <option value="">بدون قسم</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.icon ? `${cat.icon} ` : ''}{cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Price, Stock, MinOrder */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
