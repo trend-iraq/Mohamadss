@@ -53,7 +53,7 @@ export default function CartPage() {
   const sendWhatsApp = () => {
     const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '9647700000000'
     const lines = [
-      '🛒 *طلب جديد - محمد SS*',
+      '🛒 *طلب جديد - المجمع الصيني*',
       `👤 العميل: ${user?.name || customerName}`,
       `📞 الهاتف: ${customerPhone || 'غير محدد'}`,
       '',

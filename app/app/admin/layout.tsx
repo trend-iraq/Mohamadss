@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#00ff88,#00d4ff)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#050a0f' }}>M</div>
           <div>
-            <div style={{ color: '#00ff88', fontWeight: 800, fontSize: 14 }}>محمد SS</div>
+            <div style={{ color: '#00ff88', fontWeight: 800, fontSize: 14 }}>المجمع الصيني</div>
             <div style={{ color: '#7fa8c0', fontSize: 11 }}>لوحة التحكم</div>
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           position: 'sticky', top: 0, zIndex: 100,
         }}>
           <button onClick={() => setSidebarOpen(true)} style={{ background: 'transparent', border: 'none', color: '#00ff88', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>☰</button>
-          <span style={{ color: '#00ff88', fontWeight: 800, fontSize: 15 }}>محمد SS - لوحة التحكم</span>
+          <span style={{ color: '#00ff88', fontWeight: 800, fontSize: 15 }}>المجمع الصيني - لوحة التحكم</span>
           <Link href="/store" style={{ color: '#7fa8c0', fontSize: 12, textDecoration: 'none' }}>المتجر</Link>
         </div>
 

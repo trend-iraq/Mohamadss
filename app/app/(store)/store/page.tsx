@@ -75,7 +75,7 @@ export default function StorePage() {
             marginBottom: 12,
             lineHeight: 1.3,
           }}>
-            محمد SS - بيع الجملة
+            المجمع الصيني للاكسسوارات
           </h1>
           <p style={{ color: '#7fa8c0', fontSize: 15, marginBottom: 28 }}>
             إكسسوارات الهواتف المحمولة بأفضل أسعار الجملة في العراق

@@ -75,7 +75,7 @@ export default function AdminOrdersPage() {
 
     win.document.write(`
       <!DOCTYPE html><html lang="ar" dir="rtl">
-      <head><meta charset="UTF-8"><title>فاتورة - محمد SS</title>
+      <head><meta charset="UTF-8"><title>فاتورة - المجمع الصيني</title>
       <style>
         body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#333}
         .logo{text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #00aa66}
@@ -91,7 +91,7 @@ export default function AdminOrdersPage() {
       </style></head>
       <body>
         <div class="logo">
-          <h1>محمد SS - بيع الجملة</h1>
+          <h1>المجمع الصيني للاكسسوارات</h1>
           <p>📍 بغداد - الصنك - قرب ساحة الخيلاني</p>
         </div>
         <div class="info">
@@ -116,7 +116,7 @@ export default function AdminOrdersPage() {
             </tr>
           </tfoot>
         </table>
-        <div class="footer">شكراً لتعاملكم معنا - محمد SS</div>
+        <div class="footer">شكراً لتعاملكم معنا - المجمع الصيني</div>
         <div style="text-align:center;margin-top:20px">
           <button onclick="window.print()" style="background:#00aa66;color:white;border:none;padding:12px 30px;border-radius:8px;font-size:15px;cursor:pointer">
             🖨 طباعة الفاتورة

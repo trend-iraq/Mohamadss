@@ -58,7 +58,7 @@ export default function OrdersPage() {
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="UTF-8">
-        <title>فاتورة - محمد SS</title>
+        <title>فاتورة - المجمع الصيني</title>
         <style>
           body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #333; }
           .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #00aa66; padding-bottom: 20px; }
@@ -75,7 +75,7 @@ export default function OrdersPage() {
       </head>
       <body>
         <div class="header">
-          <h1>محمد SS - بيع الجملة</h1>
+          <h1>المجمع الصيني للاكسسوارات</h1>
           <p>📍 بغداد - الصنك - قرب ساحة الخيلاني</p>
         </div>
         <div class="info">

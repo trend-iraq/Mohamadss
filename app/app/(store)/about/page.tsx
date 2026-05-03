@@ -10,9 +10,9 @@ export default function AboutPage() {
           fontSize: 36, margin: '0 auto 20px', fontWeight: 900, color: '#050a0f',
         }}>M</div>
         <h1 style={{ color: '#00ff88', fontWeight: 900, fontSize: 32, marginBottom: 8 }}>
-          محمد SS
+          المجمع الصيني
         </h1>
-        <p style={{ color: '#7fa8c0', fontSize: 16 }}>بيع الجملة لإكسسوارات الهواتف المحمولة</p>
+        <p style={{ color: '#7fa8c0', fontSize: 16 }}>اكسسوارات الهواتف بأسعار الجملة</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

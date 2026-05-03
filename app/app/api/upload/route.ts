@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { v4 as uuidv4 } from 'uuid'
+import sharp from 'sharp'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,10 +24,14 @@ export async function POST(request: NextRequest) {
     for (const file of files) {
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
-      const ext = file.name.split('.').pop() || 'jpg'
-      const filename = `${uuidv4()}.${ext}`
+      const filename = `${uuidv4()}.webp`
       const filepath = join(uploadDir, filename)
-      await writeFile(filepath, buffer)
+
+      await sharp(buffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 85 })
+        .toFile(filepath)
+
       urls.push(`/uploads/${filename}`)
     }
 
