@@ -82,6 +82,53 @@ async function runMigrations() {
   }
 
   console.log('> Migrations: done')
+
+  // Seed admin user if not exists
+  await seedAdmin(client)
+}
+
+async function seedAdmin(client) {
+  const bcrypt = require('bcryptjs')
+
+  const existing = await client.execute({
+    sql: "SELECT id FROM User WHERE email = 'admin@mohamadss.com' LIMIT 1",
+    args: [],
+  })
+
+  if (existing.rows.length > 0) {
+    console.log('> Seed: admin user already exists')
+    return
+  }
+
+  const id = `admin_${Date.now()}`
+  const hashedPassword = await bcrypt.hash('admin123', 12)
+
+  await client.execute({
+    sql: `INSERT INTO User (id, name, email, password, phone, role, isActive, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    args: [id, 'مدير المتجر', 'admin@mohamadss.com', hashedPassword, '07700000000', 'admin', 1],
+  })
+
+  // Seed default settings
+  const settings = [
+    ['whatsapp_number', '9647700000000'],
+    ['store_name', 'المجمع الصيني للاكسسوارات'],
+    ['store_address', 'بغداد ساحة الوثبة مقابل أمانة بغداد'],
+    ['min_order_enabled', 'true'],
+    ['min_order_qty', '5'],
+    ['show_price_guests', 'false'],
+  ]
+
+  for (const [key, value] of settings) {
+    try {
+      await client.execute({
+        sql: "INSERT OR IGNORE INTO Settings (id, key, value) VALUES (?, ?, ?)",
+        args: [`setting_${key}`, key, value],
+      })
+    } catch {}
+  }
+
+  console.log('> Seed: admin user created (admin@mohamadss.com / admin123)')
 }
 
 module.exports = { runMigrations }
