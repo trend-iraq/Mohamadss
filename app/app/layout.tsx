@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'محمد SS - بيع الجملة لإكسسوارات الهواتف',
+  title: 'المجمع الصيني للاكسسوارات',
   description: 'متجر الجملة لإكسسوارات الهواتف المحمولة - بغداد، العراق',
 }
 

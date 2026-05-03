@@ -19,7 +19,7 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
         fontSize: 13,
       }}>
         <p style={{ marginBottom: 4 }}>
-          <span style={{ color: '#00ff88', fontWeight: 700 }}>محمد SS</span> - بيع الجملة لإكسسوارات الهواتف
+          <span style={{ color: '#00ff88', fontWeight: 700 }}>المجمع الصيني</span> - اكسسوارات الهواتف بأسعار الجملة
         </p>
         <p>📍 بغداد - الصنك - قرب ساحة الخيلاني</p>
       </footer>

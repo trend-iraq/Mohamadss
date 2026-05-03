@@ -67,7 +67,7 @@ export default function LoginPage() {
           <h1 style={{ color: '#e8f4ff', fontWeight: 800, fontSize: 22, marginBottom: 6 }}>
             تسجيل الدخول
           </h1>
-          <p style={{ color: '#7fa8c0', fontSize: 13 }}>محمد SS - بيع الجملة</p>
+          <p style={{ color: '#7fa8c0', fontSize: 13 }}>المجمع الصيني للاكسسوارات</p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

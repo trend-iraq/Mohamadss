@@ -30,8 +30,8 @@ export default function Navbar() {
               fontSize: 18, fontWeight: 900, color: '#050a0f'
             }}>M</div>
             <div>
-              <div style={{ color: '#00ff88', fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>محمد SS</div>
-              <div style={{ color: '#7fa8c0', fontSize: 11 }}>بيع الجملة</div>
+              <div style={{ color: '#00ff88', fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>المجمع الصيني</div>
+              <div style={{ color: '#7fa8c0', fontSize: 11 }}>اكسسوارات بالجملة</div>
             </div>
           </Link>
 

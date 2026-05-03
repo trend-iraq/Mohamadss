@@ -64,7 +64,7 @@ export default function RegisterPage() {
           <h1 style={{ color: '#e8f4ff', fontWeight: 800, fontSize: 22, marginBottom: 6 }}>
             إنشاء حساب جديد
           </h1>
-          <p style={{ color: '#7fa8c0', fontSize: 13 }}>انضم إلى محمد SS للجملة</p>
+          <p style={{ color: '#7fa8c0', fontSize: 13 }}>انضم إلى المجمع الصيني للاكسسوارات</p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
