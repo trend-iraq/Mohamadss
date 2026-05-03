@@ -3,7 +3,26 @@ import { requireAdmin } from '@/lib/auth'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import sharp from 'sharp'
+
+async function saveImage(buffer: Buffer, uploadDir: string, originalExt: string): Promise<string> {
+  const basename = uuidv4()
+
+  try {
+    const sharp = (await import('sharp')).default
+    const webpPath = join(uploadDir, `${basename}.webp`)
+    await sharp(buffer, { failOn: 'none' })
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toFile(webpPath)
+    return `/uploads/${basename}.webp`
+  } catch (sharpErr) {
+    console.warn('sharp failed, saving original:', sharpErr instanceof Error ? sharpErr.message : sharpErr)
+    const ext = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(originalExt) ? originalExt : 'jpg'
+    const origPath = join(uploadDir, `${basename}.${ext}`)
+    await writeFile(origPath, buffer)
+    return `/uploads/${basename}.${ext}`
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,17 +41,14 @@ export async function POST(request: NextRequest) {
     const urls: string[] = []
 
     for (const file of files) {
-      const bytes = await file.arrayBuffer()
-      const buffer = Buffer.from(bytes)
-      const filename = `${uuidv4()}.webp`
-      const filepath = join(uploadDir, filename)
+      const arrayBuffer = await file.arrayBuffer()
+      // Copy into a new Buffer to avoid shared-memory corruption
+      const buffer = Buffer.allocUnsafe(arrayBuffer.byteLength)
+      Buffer.from(arrayBuffer).copy(buffer)
 
-      await sharp(buffer)
-        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toFile(filepath)
-
-      urls.push(`/uploads/${filename}`)
+      const originalExt = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const url = await saveImage(buffer, uploadDir, originalExt)
+      urls.push(url)
     }
 
     return Response.json({ urls })
@@ -40,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (err instanceof Error && err.message === 'Unauthorized') {
       return Response.json({ error: 'غير مصرح' }, { status: 401 })
     }
-    console.error(err)
+    console.error('Upload error:', err)
     return Response.json({ error: 'فشل في رفع الملف' }, { status: 500 })
   }
 }
