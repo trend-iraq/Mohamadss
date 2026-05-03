@@ -91,7 +91,7 @@ async function seedAdmin(client) {
   const bcrypt = require('bcryptjs')
 
   const existing = await client.execute({
-    sql: "SELECT id FROM User WHERE email = 'admin@mohamadss.com' LIMIT 1",
+    sql: "SELECT id FROM User WHERE role = 'admin' LIMIT 1",
     args: [],
   })
 
@@ -101,12 +101,12 @@ async function seedAdmin(client) {
   }
 
   const id = `admin_${Date.now()}`
-  const hashedPassword = await bcrypt.hash('admin123', 12)
+  const hashedPassword = await bcrypt.hash('a77889900@@', 12)
 
   await client.execute({
     sql: `INSERT INTO User (id, name, email, password, phone, role, isActive, createdAt, updatedAt)
           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    args: [id, 'مدير المتجر', 'admin@mohamadss.com', hashedPassword, '07700000000', 'admin', 1],
+    args: [id, 'مدير المتجر', 'mnmh0073@gmail.com', hashedPassword, '07700000000', 'admin', 1],
   })
 
   // Seed default settings
@@ -128,7 +128,7 @@ async function seedAdmin(client) {
     } catch {}
   }
 
-  console.log('> Seed: admin user created (admin@mohamadss.com / admin123)')
+  console.log('> Seed: admin user created')
 }
 
 module.exports = { runMigrations }

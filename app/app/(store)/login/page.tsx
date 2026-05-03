@@ -129,16 +129,6 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <div style={{
-          marginTop: 20, padding: '12px 16px',
-          background: 'rgba(0, 212, 255, 0.08)',
-          border: '1px solid rgba(0, 212, 255, 0.2)',
-          borderRadius: 10, fontSize: 12, color: '#7fa8c0',
-          textAlign: 'center',
-        }}>
-          <strong style={{ color: '#00d4ff' }}>بيانات الأدمن للتجربة:</strong><br />
-          admin@mohamadss.com / admin123
-        </div>
       </div>
     </div>
   )
