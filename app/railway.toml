@@ -1,9 +1,10 @@
 [build]
 builder = "nixpacks"
+buildCommand = "npm run build"
 
 [deploy]
-startCommand = "npm run start"
+startCommand = "node_modules/.bin/next start -p $PORT"
 healthcheckPath = "/"
-healthcheckTimeout = 100
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
