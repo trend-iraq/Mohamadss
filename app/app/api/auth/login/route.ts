@@ -8,10 +8,15 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json()
 
     if (!email || !password) {
-      return Response.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, { status: 400 })
+      return Response.json({ error: 'بيانات الدخول مطلوبة' }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({ where: { email } })
+    const identifier = email.trim()
+    const isPhone = /^[0-9+\s()-]{7,}$/.test(identifier)
+
+    const user = isPhone
+      ? await prisma.user.findFirst({ where: { phone: identifier } })
+      : await prisma.user.findUnique({ where: { email: identifier } })
 
     if (!user || !user.isActive) {
       return Response.json({ error: 'بيانات الدخول غير صحيحة' }, { status: 401 })

@@ -20,6 +20,16 @@ model User {
   orders    Order[]
 }
 
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  icon      String?
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
 model Product {
   id          String        @id @default(cuid())
   name        String
@@ -30,8 +40,10 @@ model Product {
   images      String        @default("[]")
   video       String?
   isActive    Boolean       @default(true)
+  categoryId  String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  category    Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   orderItems  OrderItem[]
 }
 

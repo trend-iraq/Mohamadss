@@ -9,10 +9,12 @@ interface AdminUser { id: string; name: string; email: string; role: string }
 const NAV = [
   { href: '/admin', label: 'الرئيسية', icon: '📊' },
   { href: '/admin/products', label: 'المنتجات', icon: '📱' },
+  { href: '/admin/categories', label: 'الأقسام', icon: '🗂️' },
   { href: '/admin/orders', label: 'الطلبات', icon: '📦' },
   { href: '/admin/inventory', label: 'المخزون', icon: '🗃️' },
   { href: '/admin/reports', label: 'التقارير', icon: '📈' },
   { href: '/admin/users', label: 'المستخدمون', icon: '👥' },
+  { href: '/admin/settings', label: 'الإعدادات', icon: '⚙️' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

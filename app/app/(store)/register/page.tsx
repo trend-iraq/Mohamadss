@@ -8,7 +8,7 @@ import { useApp } from '@/context/AppContext'
 export default function RegisterPage() {
   const { setUser } = useApp()
   const router = useRouter()
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
+  const [form, setForm] = useState({ name: '', phone: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -35,6 +35,13 @@ export default function RegisterPage() {
       setLoading(false)
     }
   }
+
+  const fields = [
+    { key: 'name', label: 'الاسم الكامل', placeholder: 'اسمك الكامل', type: 'text', required: true },
+    { key: 'phone', label: 'رقم الهاتف', placeholder: '07XXXXXXXX', type: 'tel', required: true },
+    { key: 'email', label: 'البريد الإلكتروني (اختياري)', placeholder: 'example@email.com', type: 'email', required: false },
+    { key: 'password', label: 'كلمة المرور', placeholder: '••••••••', type: 'password', required: true },
+  ]
 
   return (
     <div style={{
@@ -68,22 +75,18 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { key: 'name', label: 'الاسم الكامل', placeholder: 'اسمك الكامل', type: 'text' },
-            { key: 'email', label: 'البريد الإلكتروني', placeholder: 'example@email.com', type: 'email' },
-            { key: 'phone', label: 'رقم الهاتف', placeholder: '07XXXXXXXX', type: 'tel' },
-            { key: 'password', label: 'كلمة المرور', placeholder: '••••••••', type: 'password' },
-          ].map(({ key, label, placeholder, type }) => (
+          {fields.map(({ key, label, placeholder, type, required }) => (
             <div key={key}>
               <label style={{ color: '#7fa8c0', fontSize: 13, marginBottom: 6, display: 'block' }}>
                 {label}
+                {required && <span style={{ color: '#00ff88', marginRight: 4 }}>*</span>}
               </label>
               <input
                 type={type}
                 value={form[key as keyof typeof form]}
                 onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
                 placeholder={placeholder}
-                required={key !== 'phone'}
+                required={required}
                 className="input-dark"
                 dir={key === 'email' ? 'ltr' : undefined}
               />

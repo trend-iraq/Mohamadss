@@ -1,6 +1,13 @@
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
+const { execSync } = require('child_process')
+
+try {
+  execSync('npx prisma migrate deploy', { stdio: 'inherit' })
+} catch (e) {
+  console.error('Migration failed:', e.message)
+}
 
 const dev = process.env.NODE_ENV !== 'production'
 const app = next({ dev })

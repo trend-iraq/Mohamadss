@@ -73,13 +73,13 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ color: '#7fa8c0', fontSize: 13, marginBottom: 6, display: 'block' }}>
-              البريد الإلكتروني
+              رقم الهاتف أو البريد الإلكتروني
             </label>
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="example@email.com"
+              placeholder="07XXXXXXXX أو example@email.com"
               required
               className="input-dark"
               dir="ltr"

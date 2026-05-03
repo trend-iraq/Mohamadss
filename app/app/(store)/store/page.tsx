@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { formatCurrency, parseImages, getStockStatus } from '@/lib/utils'
 
+interface Category {
+  id: string
+  name: string
+  icon: string | null
+  isActive: boolean
+}
+
 interface Product {
   id: string
   name: string
@@ -13,26 +20,33 @@ interface Product {
   minOrder: number
   images: string
   isActive: boolean
+  categoryId: string | null
 }
 
 export default function StorePage() {
   const { addToCart, user } = useApp()
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [added, setAdded] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/products')
-      .then(r => r.json())
-      .then(d => setProducts(d.products || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetch('/api/products').then(r => r.json()),
+      fetch('/api/categories').then(r => r.json()),
+    ]).then(([pd, cd]) => {
+      setProducts(pd.products || [])
+      setCategories((cd.categories || []).filter((c: Category) => c.isActive))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchCat = activeCategory === null || p.categoryId === activeCategory
+    return matchSearch && matchCat
+  })
 
   const handleAdd = (product: Product) => {
     const imgs = parseImages(product.images)
@@ -95,6 +109,49 @@ export default function StorePage() {
         </div>
       </div>
 
+      {/* Category Tabs */}
+      {categories.length > 0 && (
+        <div style={{
+          overflowX: 'auto',
+          borderBottom: '1px solid rgba(26,58,92,0.4)',
+          background: 'rgba(13,21,32,0.6)',
+        }}>
+          <div style={{
+            display: 'flex', gap: 6, padding: '12px 16px',
+            width: 'max-content', minWidth: '100%',
+          }}>
+            <button
+              onClick={() => setActiveCategory(null)}
+              style={{
+                padding: '8px 18px', borderRadius: 50, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', whiteSpace: 'nowrap', border: 'none',
+                background: activeCategory === null ? 'linear-gradient(135deg,#00ff88,#00d4ff)' : 'rgba(255,255,255,0.06)',
+                color: activeCategory === null ? '#050a0f' : '#7fa8c0',
+                transition: 'all 0.2s',
+              }}
+            >
+              🏠 الكل
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                style={{
+                  padding: '8px 18px', borderRadius: 50, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', whiteSpace: 'nowrap', border: 'none',
+                  background: activeCategory === cat.id ? 'linear-gradient(135deg,#00ff88,#00d4ff)' : 'rgba(255,255,255,0.06)',
+                  color: activeCategory === cat.id ? '#050a0f' : '#7fa8c0',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {cat.icon && <span style={{ marginLeft: 6 }}>{cat.icon}</span>}
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Products Grid */}
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 16px' }}>
         {loading ? (
@@ -142,14 +199,11 @@ export default function StorePage() {
                         📱
                       </div>
                     )}
-                    {/* Stock badge */}
                     <div style={{
                       position: 'absolute', top: 8, right: 8,
                       background: 'rgba(5, 10, 15, 0.85)',
                       border: `1px solid ${product.stock === 0 ? '#ef4444' : product.stock <= 10 ? '#f59e0b' : '#00ff88'}`,
-                      borderRadius: 6,
-                      padding: '3px 8px',
-                      fontSize: 11,
+                      borderRadius: 6, padding: '3px 8px', fontSize: 11,
                       color: product.stock === 0 ? '#ef4444' : product.stock <= 10 ? '#f59e0b' : '#00ff88',
                       fontWeight: 600,
                     }}>
@@ -159,10 +213,7 @@ export default function StorePage() {
 
                   {/* Info */}
                   <div style={{ padding: 16 }}>
-                    <h3 style={{
-                      color: '#e8f4ff', fontWeight: 700, fontSize: 15,
-                      marginBottom: 6, lineHeight: 1.4,
-                    }}>
+                    <h3 style={{ color: '#e8f4ff', fontWeight: 700, fontSize: 15, marginBottom: 6, lineHeight: 1.4 }}>
                       {product.name}
                     </h3>
                     {product.description && (
@@ -175,7 +226,6 @@ export default function StorePage() {
                       </p>
                     )}
 
-                    {/* Price & Stock */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                       <div>
                         {user ? (
@@ -183,16 +233,11 @@ export default function StorePage() {
                             {formatCurrency(product.price)}
                           </span>
                         ) : (
-                          <span style={{ color: '#7fa8c0', fontSize: 12 }}>
-                            سجل الدخول لرؤية السعر
-                          </span>
+                          <span style={{ color: '#7fa8c0', fontSize: 12 }}>سجل الدخول لرؤية السعر</span>
                         )}
                       </div>
-                      <span style={{ color: '#7fa8c0', fontSize: 12 }}>
-                        المخزون: {product.stock}
-                      </span>
+                      <span style={{ color: '#7fa8c0', fontSize: 12 }}>المخزون: {product.stock}</span>
                     </div>
-
 
                     <button
                       onClick={() => handleAdd(product)}
@@ -201,9 +246,7 @@ export default function StorePage() {
                       style={{
                         width: '100%',
                         opacity: product.stock === 0 ? 0.5 : 1,
-                        background: isAdded
-                          ? 'linear-gradient(135deg, #00d4ff, #00ff88)'
-                          : undefined,
+                        background: isAdded ? 'linear-gradient(135deg, #00d4ff, #00ff88)' : undefined,
                         transition: 'all 0.3s',
                       }}
                     >
