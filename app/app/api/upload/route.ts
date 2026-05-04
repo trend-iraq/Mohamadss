@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import sharp from 'sharp'
+
+const BUCKET = 'products'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,18 +22,34 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await file.arrayBuffer()
       const buffer = Buffer.from(new Uint8Array(arrayBuffer))
 
+      let uploadBuffer: Buffer
+      let contentType: string
+
       try {
-        // Process with sharp → return as base64 data URL (no disk storage needed)
-        const webpBuffer = await sharp(buffer)
-          .resize(700, 700, { fit: 'inside', withoutEnlargement: true })
-          .webp({ quality: 80 })
+        uploadBuffer = await sharp(buffer)
+          .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 82 })
           .toBuffer()
-        urls.push(`data:image/webp;base64,${webpBuffer.toString('base64')}`)
+        contentType = 'image/webp'
       } catch {
-        // sharp failed → return original as base64
-        const mime = file.type || 'image/jpeg'
-        urls.push(`data:${mime};base64,${buffer.toString('base64')}`)
+        uploadBuffer = buffer
+        contentType = file.type || 'image/jpeg'
       }
+
+      const ext = contentType === 'image/webp' ? 'webp' : 'jpg'
+      const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(filename, uploadBuffer, { contentType, upsert: false })
+
+      if (error) {
+        console.error('Supabase upload error:', error)
+        return Response.json({ error: 'فشل رفع الصورة: ' + error.message }, { status: 500 })
+      }
+
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename)
+      urls.push(data.publicUrl)
     }
 
     return Response.json({ urls })

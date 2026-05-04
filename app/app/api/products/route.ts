@@ -16,17 +16,7 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Strip heavy base64 image data from list — return only first image
-  const lightProducts = products.map(p => {
-    try {
-      const imgs: string[] = JSON.parse(p.images || '[]')
-      return { ...p, images: JSON.stringify(imgs.slice(0, 1)) }
-    } catch {
-      return { ...p, images: '[]' }
-    }
-  })
-
-  return Response.json({ products: lightProducts }, {
+  return Response.json({ products }, {
     headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' },
   })
 }

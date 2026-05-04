@@ -62,24 +62,20 @@ export default function AdminProductsPage() {
     setShowModal(true)
   }
 
-  const openEdit = async (p: Product) => {
+  const openEdit = (p: Product) => {
     setEditProduct(p)
-    setShowModal(true)
-    // Fetch full product data (list returns only first image)
-    const res = await fetch(`/api/products/${p.id}`)
-    const data = await res.json()
-    const full = data.product || p
     setForm({
-      name: full.name,
-      description: full.description || '',
-      price: String(full.price),
-      stock: String(full.stock),
-      minOrder: String(full.minOrder),
-      images: parseImages(full.images),
-      video: full.video || '',
-      isActive: full.isActive,
-      categoryId: full.categoryId || '',
+      name: p.name,
+      description: p.description || '',
+      price: String(p.price),
+      stock: String(p.stock),
+      minOrder: String(p.minOrder),
+      images: parseImages(p.images),
+      video: p.video || '',
+      isActive: p.isActive,
+      categoryId: p.categoryId || '',
     })
+    setShowModal(true)
   }
 
   const handleUpload = async (files: FileList, type: 'image' | 'video') => {
