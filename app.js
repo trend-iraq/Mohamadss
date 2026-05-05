@@ -332,19 +332,27 @@ async function deleteOrder(id) {
 }
 
 // ===== السلة =====
-function addToCart(product) {
-  const existing = state.cart.find(i => i.id === product.id);
+function addToCart(product, selectedOptions = {}) {
+  const mainImage = (product.images && product.images[0]) || product.image || '';
+  // معرّف فريد للمنتج+الخيارات (نفس المنتج بخيارين مختلفين = منتجين منفصلين في السلة)
+  const optionsKey = Object.keys(selectedOptions).length > 0 
+    ? '|' + Object.entries(selectedOptions).map(([k,v]) => `${k}:${v}`).join('|')
+    : '';
+  const cartItemId = product.id + optionsKey;
+  
+  const existing = state.cart.find(i => i.cartItemId === cartItemId);
   if (existing) {
     existing.qty++;
   } else {
-    const mainImage = (product.images && product.images[0]) || product.image || '';
     state.cart.push({ 
-      id: product.id, 
+      id: product.id,
+      cartItemId: cartItemId,
       name: product.name, 
       price: product.price, 
       image: mainImage, 
       qty: 1,
-      bogo: !!product.bogo
+      bogo: !!product.bogo,
+      selectedOptions: selectedOptions
     });
   }
   showToast('✓ تمت الإضافة إلى السلة');
@@ -352,29 +360,37 @@ function addToCart(product) {
 }
 
 // اطلب الآن: شراء سريع لمنتج واحد فقط (يتجاوز السلة)
-function buyNow(product) {
+function buyNow(product, selectedOptions = {}) {
   // حفظ السلة الحالية لاسترجاعها لاحقاً
   state._savedCart = [...state.cart];
   
   // وضع المنتج فقط في السلة
   const mainImage = (product.images && product.images[0]) || product.image || '';
+  const optionsKey = Object.keys(selectedOptions).length > 0 
+    ? '|' + Object.entries(selectedOptions).map(([k,v]) => `${k}:${v}`).join('|')
+    : '';
+  const cartItemId = product.id + optionsKey;
+  
   state.cart = [{ 
-    id: product.id, 
+    id: product.id,
+    cartItemId: cartItemId,
     name: product.name, 
     price: product.price, 
     image: mainImage, 
-    qty: 1 
+    qty: 1,
+    bogo: !!product.bogo,
+    selectedOptions: selectedOptions
   }];
   
   // فتح خيارات الدفع مباشرة
   const s = state.settings;
   if (s.directCheckoutEnabled && !s.whatsappCheckoutEnabled) {
-    showDirectCheckout(true); // true = وضع اطلب الآن
+    showDirectCheckout(true);
   } else if (!s.directCheckoutEnabled && s.whatsappCheckoutEnabled) {
     checkoutWhatsApp();
     restoreCart();
   } else {
-    showCheckoutChoice(true); // true = وضع اطلب الآن
+    showCheckoutChoice(true);
   }
 }
 
@@ -388,7 +404,7 @@ function restoreCart() {
 }
 
 function updateCartQty(id, delta) {
-  const item = state.cart.find(i => i.id === id);
+  const item = state.cart.find(i => i.cartItemId === id || i.id === id);
   if (!item) return;
   item.qty = Math.max(1, item.qty + delta);
   renderCart();
@@ -396,7 +412,7 @@ function updateCartQty(id, delta) {
 }
 
 function removeFromCart(id) {
-  state.cart = state.cart.filter(i => i.id !== id);
+  state.cart = state.cart.filter(i => i.cartItemId !== id && i.id !== id);
   renderCart();
   updateCartBadge();
 }
@@ -484,7 +500,12 @@ function checkoutWhatsApp(customerInfo = null) {
   
   let msg = `🛍️ *طلب جديد من ${s.storeName}*\n\n`;
   state.cart.forEach((it, i) => {
-    msg += `${i+1}. ${it.name}${it.bogo ? ' 🎁' : ''}\n   ${it.qty} × ${formatPrice(it.price)} = ${formatPrice(it.price * it.qty)}\n\n`;
+    msg += `${i+1}. ${it.name}${it.bogo ? ' 🎁' : ''}\n`;
+    if (it.selectedOptions && Object.keys(it.selectedOptions).length > 0) {
+      const optsStr = Object.entries(it.selectedOptions).map(([k, v]) => `${k}: ${v}`).join(' • ');
+      msg += `   📋 ${optsStr}\n`;
+    }
+    msg += `   ${it.qty} × ${formatPrice(it.price)} = ${formatPrice(it.price * it.qty)}\n\n`;
   });
   msg += `\n💰 *المجموع: ${formatPrice(subtotal)}*\n`;
   if (bogoDiscount > 0) {
@@ -763,11 +784,24 @@ function attachStoreEvents() {
       } else if (a === 'add-cart') {
         e.stopPropagation();
         const p = state.products.find(x => x.id === id);
-        if (p) addToCart(p);
+        if (p) {
+          // إذا كان فيه خيارات، افتح تفاصيل المنتج ليختار
+          if (p.optionGroups && p.optionGroups.length > 0) {
+            showProductModal(p);
+          } else {
+            addToCart(p);
+          }
+        }
       } else if (a === 'buy-now') {
         e.stopPropagation();
         const p = state.products.find(x => x.id === id);
-        if (p) buyNow(p);
+        if (p) {
+          if (p.optionGroups && p.optionGroups.length > 0) {
+            showProductModal(p);
+          } else {
+            buyNow(p);
+          }
+        }
       } else if (a === 'open-cart') {
         renderCart();
       } else if (a === 'admin-login') {
@@ -864,6 +898,28 @@ function showProductModal(p) {
                 </div>
               </div>
             ` : ''}
+            
+            ${p.optionGroups && p.optionGroups.length > 0 ? `
+              <div class="product-option-selectors">
+                ${p.optionGroups.map((group, gi) => `
+                  <div class="option-selector" data-option-group-name="${escapeHtml(group.name)}">
+                    <label class="option-selector-label">
+                      ${escapeHtml(group.name)} <span class="req">*</span>
+                    </label>
+                    <div class="option-buttons">
+                      ${group.values.map((val, vi) => `
+                        <button type="button" class="option-btn ${vi === 0 ? 'active' : ''}" 
+                                data-option-value="${gi}-${vi}"
+                                data-option-text="${escapeHtml(val)}">
+                          ${escapeHtml(val)}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            
             <div class="stock-info">
               <p>✓ متوفر${p.stock ? ` • ${p.stock} قطعة` : ''}</p>
               <p class="small">💵 الدفع عند الاستلام • 🚚 توصيل لجميع المحافظات</p>
@@ -890,13 +946,43 @@ function showProductModal(p) {
   });
   
   $(`[data-add-from-modal="${p.id}"]`)?.addEventListener('click', () => {
-    addToCart(p);
+    const selectedOptions = collectSelectedOptions();
+    if (selectedOptions === null) return; // لم يختر
+    addToCart(p, selectedOptions);
     closeModal();
   });
   
   $(`[data-buy-from-modal="${p.id}"]`)?.addEventListener('click', () => {
+    const selectedOptions = collectSelectedOptions();
+    if (selectedOptions === null) return;
     closeModal();
-    buyNow(p);
+    buyNow(p, selectedOptions);
+  });
+  
+  // جمع الخيارات المختارة من الأزرار
+  function collectSelectedOptions() {
+    if (!p.optionGroups || p.optionGroups.length === 0) return {};
+    const selected = {};
+    for (const group of p.optionGroups) {
+      const groupName = group.name;
+      const activeBtn = document.querySelector(`[data-option-group-name="${CSS.escape(groupName)}"] .option-btn.active`);
+      if (activeBtn) {
+        selected[groupName] = activeBtn.dataset.optionText;
+      } else {
+        showToast(`الرجاء اختيار ${groupName}`, 'error');
+        return null;
+      }
+    }
+    return selected;
+  }
+  
+  // معالج الضغط على زر خيار
+  document.querySelectorAll('.option-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const parent = btn.closest('.option-buttons');
+      parent.querySelectorAll('.option-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
   });
   
   // التحكم في المعرض - النقاط والمصغرات
@@ -968,12 +1054,19 @@ function renderCart() {
                   <img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />
                   <div class="cart-item-info">
                     <h4>${escapeHtml(it.name)} ${it.bogo ? '<span class="bogo-tag">🎁 1+1=3</span>' : ''}</h4>
+                    ${it.selectedOptions && Object.keys(it.selectedOptions).length > 0 ? `
+                      <div class="cart-item-options">
+                        ${Object.entries(it.selectedOptions).map(([k, v]) => `
+                          <span class="cart-option-tag">${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></span>
+                        `).join('')}
+                      </div>
+                    ` : ''}
                     <div class="price">${formatPrice(it.price)}</div>
                     <div class="qty-controls">
-                      <button class="qty-btn" data-cart-qty="${it.id}" data-delta="-1">−</button>
+                      <button class="qty-btn" data-cart-qty="${it.cartItemId || it.id}" data-delta="-1">−</button>
                       <span class="qty-display">${it.qty}</span>
-                      <button class="qty-btn" data-cart-qty="${it.id}" data-delta="1">+</button>
-                      <button class="btn-remove" data-cart-remove="${it.id}">🗑️</button>
+                      <button class="qty-btn" data-cart-qty="${it.cartItemId || it.id}" data-delta="1">+</button>
+                      <button class="btn-remove" data-cart-remove="${it.cartItemId || it.id}">🗑️</button>
                     </div>
                     ${bogoHint}
                   </div>
@@ -1217,7 +1310,7 @@ function showDirectCheckout(isBuyNow = false) {
     const finalTotal = total - bogoDiscount + shipping;
     
     const order = await createOrder({
-      items: state.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image, bogo: !!i.bogo })),
+      items: state.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image, bogo: !!i.bogo, selectedOptions: i.selectedOptions || {} })),
       subtotal: total,
       bogoDiscount: bogoDiscount,
       bogoFreeItems: getBogoFreeItemsCount(),
@@ -1652,6 +1745,18 @@ function showProductForm(product) {
             <input type="checkbox" id="pBogo" ${data.bogo ? 'checked' : ''} />
             <span><strong>🎁 عرض 1+1=3</strong> (الزبون يأخذ 3 ويدفع ثمن 2)</span>
           </label>
+          
+          <!-- خيارات المنتج -->
+          <div class="product-options-section">
+            <div class="product-options-header">
+              <h4>🏷️ خيارات المنتج (اختياري)</h4>
+              <p class="options-hint">مثل: النوع، اللون، المقاس - يختار الزبون قبل الشراء</p>
+            </div>
+            <div id="optionsList"></div>
+            <button type="button" class="btn-add-option-group" id="addOptionGroup">
+              + إضافة مجموعة خيارات
+            </button>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" data-close>إلغاء</button>
@@ -1719,6 +1824,88 @@ function showProductForm(product) {
   
   renderImages();
   updateButtons();
+  
+  // ===== إدارة خيارات المنتج =====
+  let optionGroups = (data.optionGroups || []).map(g => ({...g})); // نسخة قابلة للتعديل
+  
+  function renderOptionGroups() {
+    const container = $('#optionsList');
+    if (!optionGroups || optionGroups.length === 0) {
+      container.innerHTML = '<p class="no-options">لم تضف خيارات بعد - منتج بدون خيارات</p>';
+      return;
+    }
+    container.innerHTML = optionGroups.map((group, gi) => `
+      <div class="option-group" data-group="${gi}">
+        <div class="option-group-header">
+          <input type="text" class="option-group-name" value="${escapeHtml(group.name || '')}" 
+                 placeholder="اسم المجموعة (مثل: النوع، اللون)" data-group-name="${gi}" />
+          <button type="button" class="btn-remove-group" data-remove-group="${gi}" title="حذف المجموعة">🗑️</button>
+        </div>
+        <div class="option-values">
+          ${(group.values || []).map((val, vi) => `
+            <div class="option-value-row">
+              <input type="text" value="${escapeHtml(val)}" placeholder="مثال: ايفون"
+                     data-group-val="${gi}-${vi}" />
+              <button type="button" class="btn-remove-val" data-remove-val="${gi}-${vi}">×</button>
+            </div>
+          `).join('')}
+          <button type="button" class="btn-add-value" data-add-value="${gi}">+ إضافة خيار</button>
+        </div>
+      </div>
+    `).join('');
+    attachOptionsEvents();
+  }
+  
+  function attachOptionsEvents() {
+    // اسم المجموعة
+    document.querySelectorAll('[data-group-name]').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const gi = parseInt(input.dataset.groupName);
+        optionGroups[gi].name = e.target.value;
+      });
+    });
+    // قيمة الخيار
+    document.querySelectorAll('[data-group-val]').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const [gi, vi] = input.dataset.groupVal.split('-').map(Number);
+        optionGroups[gi].values[vi] = e.target.value;
+      });
+    });
+    // حذف مجموعة
+    document.querySelectorAll('[data-remove-group]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gi = parseInt(btn.dataset.removeGroup);
+        if (!confirm('حذف مجموعة الخيارات؟')) return;
+        optionGroups.splice(gi, 1);
+        renderOptionGroups();
+      });
+    });
+    // حذف قيمة
+    document.querySelectorAll('[data-remove-val]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [gi, vi] = btn.dataset.removeVal.split('-').map(Number);
+        optionGroups[gi].values.splice(vi, 1);
+        renderOptionGroups();
+      });
+    });
+    // إضافة قيمة
+    document.querySelectorAll('[data-add-value]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gi = parseInt(btn.dataset.addValue);
+        if (!optionGroups[gi].values) optionGroups[gi].values = [];
+        optionGroups[gi].values.push('');
+        renderOptionGroups();
+      });
+    });
+  }
+  
+  // إضافة مجموعة جديدة
+  $('#addOptionGroup').addEventListener('click', () => {
+    optionGroups.push({ name: '', values: [''] });
+    renderOptionGroups();
+  });
+  
+  renderOptionGroups();
   
   // معالج: تحديث الأقسام الفرعية عند تغيير القسم الرئيسي
   function updateSubcategories() {
@@ -1835,7 +2022,13 @@ function showProductForm(product) {
       description, 
       stock, 
       featured,
-      bogo  // عرض 1+1=3
+      bogo,
+      optionGroups: optionGroups
+        .filter(g => g.name && g.name.trim() && g.values && g.values.some(v => v && v.trim()))
+        .map(g => ({
+          name: g.name.trim(),
+          values: g.values.filter(v => v && v.trim()).map(v => v.trim())
+        }))
     };
     if (oldPrice) productData.oldPrice = oldPrice;
     if (video) productData.video = video;
@@ -1949,6 +2142,11 @@ function showOrderDetail(order) {
                 <img src="${escapeHtml(i.image || '')}" alt="" onerror="this.style.opacity=0.3" />
                 <div class="order-item-info">
                   <h5>${escapeHtml(i.name)}</h5>
+                  ${i.selectedOptions && Object.keys(i.selectedOptions).length > 0 ? `
+                    <p style="font-size:11px;color:var(--primary);font-weight:700;">
+                      ${Object.entries(i.selectedOptions).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(v)}`).join(' • ')}
+                    </p>
+                  ` : ''}
                   <p>الكمية: ${i.qty} × ${formatPrice(i.price)}</p>
                 </div>
                 <div class="item-total">${formatPrice(i.price * i.qty)}</div>
