@@ -338,7 +338,14 @@ function addToCart(product) {
     existing.qty++;
   } else {
     const mainImage = (product.images && product.images[0]) || product.image || '';
-    state.cart.push({ id: product.id, name: product.name, price: product.price, image: mainImage, qty: 1 });
+    state.cart.push({ 
+      id: product.id, 
+      name: product.name, 
+      price: product.price, 
+      image: mainImage, 
+      qty: 1,
+      bogo: !!product.bogo
+    });
   }
   showToast('✓ تمت الإضافة إلى السلة');
   updateCartBadge();
@@ -398,11 +405,42 @@ function cartTotal() {
   return state.cart.reduce((s, i) => s + i.price * i.qty, 0);
 }
 
+// حساب خصم 1+1=3 (لكل 3 قطع، واحدة مجانية)
+// السعر موحد، فالأمر بسيط: لكل 3 قطع، خصم سعر قطعة واحدة
+function cartBogoDiscount() {
+  let totalDiscount = 0;
+  state.cart.forEach(item => {
+    if (item.bogo && item.qty >= 3) {
+      // كم مجموعة من 3؟
+      const freeCount = Math.floor(item.qty / 3);
+      // الخصم = عدد المجموعات × سعر القطعة
+      totalDiscount += freeCount * item.price;
+    }
+  });
+  return totalDiscount;
+}
+
+// المجموع بعد خصم 1+1=3 (قبل الشحن)
+function cartTotalAfterBogo() {
+  return cartTotal() - cartBogoDiscount();
+}
+
+// كم قطعة مجانية في السلة؟
+function getBogoFreeItemsCount() {
+  let total = 0;
+  state.cart.forEach(item => {
+    if (item.bogo && item.qty >= 3) {
+      total += Math.floor(item.qty / 3);
+    }
+  });
+  return total;
+}
+
 // حساب أجور التوصيل
 function getShippingFee(governorate = '') {
   const s = state.settings;
   if (!s.shippingEnabled) return 0;
-  const subtotal = cartTotal();
+  const subtotal = cartTotalAfterBogo(); // المبلغ بعد خصم 1+1=3
   // التوصيل المجاني فوق مبلغ معين
   if (s.freeShippingEnabled && s.freeShippingMin > 0 && subtotal >= s.freeShippingMin) {
     return 0;
@@ -415,9 +453,9 @@ function getShippingFee(governorate = '') {
   return s.shippingFee || 0;
 }
 
-// المجموع النهائي = المنتجات + الشحن
+// المجموع النهائي = المنتجات (بعد خصم 1+1=3) + الشحن
 function grandTotal(governorate = '') {
-  return cartTotal() + getShippingFee(governorate);
+  return cartTotalAfterBogo() + getShippingFee(governorate);
 }
 
 function cartCount() {
@@ -438,14 +476,20 @@ function checkoutWhatsApp(customerInfo = null) {
   if (state.cart.length === 0) return;
   const s = state.settings;
   const subtotal = cartTotal();
+  const bogoDiscount = cartBogoDiscount();
+  const afterBogo = subtotal - bogoDiscount;
   const shipping = customerInfo ? getShippingFee(customerInfo.governorate) : (s.shippingEnabled ? s.shippingFee : 0);
-  const total = subtotal + shipping;
+  const total = afterBogo + shipping;
+  const freeItems = getBogoFreeItemsCount();
   
   let msg = `🛍️ *طلب جديد من ${s.storeName}*\n\n`;
   state.cart.forEach((it, i) => {
-    msg += `${i+1}. ${it.name}\n   ${it.qty} × ${formatPrice(it.price)} = ${formatPrice(it.price * it.qty)}\n\n`;
+    msg += `${i+1}. ${it.name}${it.bogo ? ' 🎁' : ''}\n   ${it.qty} × ${formatPrice(it.price)} = ${formatPrice(it.price * it.qty)}\n\n`;
   });
   msg += `\n💰 *المجموع: ${formatPrice(subtotal)}*\n`;
+  if (bogoDiscount > 0) {
+    msg += `🎁 *عرض 1+1=3: -${formatPrice(bogoDiscount)} (${freeItems} قطعة مجاناً!)*\n`;
+  }
   if (shipping > 0) {
     msg += `🚚 *أجور التوصيل: ${formatPrice(shipping)}*\n`;
   } else if (s.shippingEnabled) {
@@ -669,6 +713,7 @@ function renderProductCard(p) {
         <img class="product-image" src="${escapeHtml(mainImage)}" alt="${escapeHtml(p.name)}" onerror="this.src='${placeholderImg}'" />
         ${discount > 0 ? `<div class="discount-badge">-${discount}%</div>` : ''}
         ${p.featured ? `<div class="featured-badge">🔥 تريند</div>` : ''}
+        ${p.bogo ? `<div class="bogo-badge">🎁 1+1=3</div>` : ''}
         ${hasVideo ? `<div class="has-video-badge">▶ فيديو</div>` : (extraImagesCount > 0 ? `<div class="has-video-badge">📷 +${extraImagesCount}</div>` : '')}
       </div>
       <div class="product-info">
@@ -810,6 +855,15 @@ function showProductModal(p) {
               ${p.oldPrice ? `<span class="price-old">${formatPrice(p.oldPrice)}</span>` : ''}
             </div>
             <p class="description">${escapeHtml(p.description || '')}</p>
+            ${p.bogo ? `
+              <div class="bogo-banner">
+                <div class="bogo-banner-icon">🎁</div>
+                <div class="bogo-banner-text">
+                  <div class="bogo-banner-title">عرض حصري: 1+1=3</div>
+                  <div class="bogo-banner-desc">اشترِ 3 قطع وادفع ثمن قطعتين فقط!</div>
+                </div>
+              </div>
+            ` : ''}
             <div class="stock-info">
               <p>✓ متوفر${p.stock ? ` • ${p.stock} قطعة` : ''}</p>
               <p class="small">💵 الدفع عند الاستلام • 🚚 توصيل لجميع المحافظات</p>
@@ -897,29 +951,55 @@ function renderCart() {
           </div>
         ` : `
           <div class="cart-items">
-            ${state.cart.map(it => `
-              <div class="cart-item">
-                <img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />
-                <div class="cart-item-info">
-                  <h4>${escapeHtml(it.name)}</h4>
-                  <div class="price">${formatPrice(it.price)}</div>
-                  <div class="qty-controls">
-                    <button class="qty-btn" data-cart-qty="${it.id}" data-delta="-1">−</button>
-                    <span class="qty-display">${it.qty}</span>
-                    <button class="qty-btn" data-cart-qty="${it.id}" data-delta="1">+</button>
-                    <button class="btn-remove" data-cart-remove="${it.id}">🗑️</button>
+            ${state.cart.map(it => {
+              // رسالة تشجيعية: لو المنتج عليه عرض ولم يصل لـ 3 بعد
+              let bogoHint = '';
+              if (it.bogo) {
+                if (it.qty < 3) {
+                  const need = 3 - it.qty;
+                  bogoHint = `<div class="cart-bogo-hint">🎁 أضف ${need} قطعة أخرى للحصول على ${need === 1 ? 'قطعة' : 'قطع'} مجانية!</div>`;
+                } else {
+                  const free = Math.floor(it.qty / 3);
+                  bogoHint = `<div class="cart-bogo-success">🎉 ${free} قطعة مجانية! وفّرت ${formatPrice(free * it.price)}</div>`;
+                }
+              }
+              return `
+                <div class="cart-item ${it.bogo ? 'has-bogo' : ''}">
+                  <img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />
+                  <div class="cart-item-info">
+                    <h4>${escapeHtml(it.name)} ${it.bogo ? '<span class="bogo-tag">🎁 1+1=3</span>' : ''}</h4>
+                    <div class="price">${formatPrice(it.price)}</div>
+                    <div class="qty-controls">
+                      <button class="qty-btn" data-cart-qty="${it.id}" data-delta="-1">−</button>
+                      <span class="qty-display">${it.qty}</span>
+                      <button class="qty-btn" data-cart-qty="${it.id}" data-delta="1">+</button>
+                      <button class="btn-remove" data-cart-remove="${it.id}">🗑️</button>
+                    </div>
+                    ${bogoHint}
                   </div>
                 </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
           <div class="cart-footer">
+            ${cartBogoDiscount() > 0 ? `
+              <div class="cart-bogo-summary">
+                <div class="cart-summary-row">
+                  <span>المجموع الأصلي:</span>
+                  <span style="text-decoration:line-through;color:var(--text-muted);">${formatPrice(total)}</span>
+                </div>
+                <div class="cart-summary-row" style="color:#16a34a;font-weight:700;">
+                  <span>🎁 خصم 1+1=3 (${getBogoFreeItemsCount()} مجاناً):</span>
+                  <span>−${formatPrice(cartBogoDiscount())}</span>
+                </div>
+              </div>
+            ` : ''}
             <div class="cart-total">
               <span>الإجمالي:</span>
-              <span>${formatPrice(total)}</span>
+              <span>${formatPrice(total - cartBogoDiscount())}</span>
             </div>
-            ${total < state.settings.freeShippingMin ? `
-              <div class="shipping-hint">💡 أضف بقيمة ${formatPrice(state.settings.freeShippingMin - total)} للحصول على توصيل مجاني</div>
+            ${state.settings.freeShippingEnabled && (total - cartBogoDiscount()) < state.settings.freeShippingMin ? `
+              <div class="shipping-hint">💡 أضف بقيمة ${formatPrice(state.settings.freeShippingMin - (total - cartBogoDiscount()))} للحصول على توصيل مجاني</div>
             ` : ''}
             <button class="btn-checkout" data-checkout>إتمام الطلب</button>
           </div>
@@ -1051,9 +1131,15 @@ function showDirectCheckout(isBuyNow = false) {
           <div class="order-summary" id="orderSummary">
             <div class="order-summary-row"><span>عدد المنتجات:</span><span><strong>${cartCount()}</strong></span></div>
             <div class="order-summary-row"><span>المجموع:</span><span><strong>${formatPrice(total)}</strong></span></div>
+            ${cartBogoDiscount() > 0 ? `
+              <div class="order-summary-row" style="color:#16a34a;font-weight:700;">
+                <span>🎁 خصم 1+1=3:</span>
+                <span>−${formatPrice(cartBogoDiscount())}</span>
+              </div>
+            ` : ''}
             <div class="order-summary-row" id="shippingRow"><span>أجور التوصيل:</span><span id="shippingValue"><strong>اختر المحافظة</strong></span></div>
             <div class="order-summary-row"><span>طريقة الدفع:</span><span><strong>عند الاستلام 💵</strong></span></div>
-            <div class="order-summary-row order-summary-total"><span>الإجمالي:</span><span class="price" id="grandTotalValue">${formatPrice(total)}</span></div>
+            <div class="order-summary-row order-summary-total"><span>الإجمالي:</span><span class="price" id="grandTotalValue">${formatPrice(total - cartBogoDiscount())}</span></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -1079,16 +1165,17 @@ function showDirectCheckout(isBuyNow = false) {
     const s = state.settings;
     const shippingEl = $('#shippingValue');
     const grandEl = $('#grandTotalValue');
+    const afterBogo = total - cartBogoDiscount(); // المبلغ بعد خصم 1+1=3
     
     if (!s.shippingEnabled) {
       shippingEl.innerHTML = '<strong style="color:#16a34a;">مجاني 🎉</strong>';
-      grandEl.textContent = formatPrice(total);
+      grandEl.textContent = formatPrice(afterBogo);
       return;
     }
     
     if (!gov) {
       shippingEl.innerHTML = '<strong>اختر المحافظة</strong>';
-      grandEl.textContent = formatPrice(total) + ' + التوصيل';
+      grandEl.textContent = formatPrice(afterBogo) + ' + التوصيل';
       return;
     }
     
@@ -1098,7 +1185,7 @@ function showDirectCheckout(isBuyNow = false) {
     } else {
       shippingEl.innerHTML = `<strong>${formatPrice(shipping)}</strong>`;
     }
-    grandEl.textContent = formatPrice(total + shipping);
+    grandEl.textContent = formatPrice(afterBogo + shipping);
   }
   
   $('#cGov').addEventListener('change', updateShippingDisplay);
@@ -1126,11 +1213,14 @@ function showDirectCheckout(isBuyNow = false) {
     btn.textContent = 'جاري الإرسال...';
     
     const shipping = getShippingFee(gov);
-    const finalTotal = total + shipping;
+    const bogoDiscount = cartBogoDiscount();
+    const finalTotal = total - bogoDiscount + shipping;
     
     const order = await createOrder({
-      items: state.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image })),
+      items: state.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image, bogo: !!i.bogo })),
       subtotal: total,
+      bogoDiscount: bogoDiscount,
+      bogoFreeItems: getBogoFreeItemsCount(),
       shipping: shipping,
       total: finalTotal,
       customer: { name, phone, governorate: gov, address: addr, notes }
@@ -1557,6 +1647,11 @@ function showProductForm(product) {
             <input type="checkbox" id="pFeatured" ${data.featured ? 'checked' : ''} />
             <span><strong>🔥 منتج مميز</strong> (يظهر في "الأكثر رواجاً")</span>
           </label>
+          
+          <label class="checkbox-card" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#f59e0b;">
+            <input type="checkbox" id="pBogo" ${data.bogo ? 'checked' : ''} />
+            <span><strong>🎁 عرض 1+1=3</strong> (الزبون يأخذ 3 ويدفع ثمن 2)</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" data-close>إلغاء</button>
@@ -1719,6 +1814,7 @@ function showProductForm(product) {
     const description = $('#pDesc').value.trim();
     const stock = parseInt($('#pStock').value) || 0;
     const featured = $('#pFeatured').checked;
+    const bogo = $('#pBogo').checked;
     
     if (!name || !price || images.length === 0) {
       showToast('يرجى تعبئة الاسم والسعر وإضافة صورة واحدة على الأقل', 'error');
@@ -1738,7 +1834,8 @@ function showProductForm(product) {
       image: images[0],
       description, 
       stock, 
-      featured 
+      featured,
+      bogo  // عرض 1+1=3
     };
     if (oldPrice) productData.oldPrice = oldPrice;
     if (video) productData.video = video;
@@ -1862,6 +1959,12 @@ function showOrderDetail(order) {
                 <span>المجموع:</span>
                 <span><strong>${formatPrice(order.subtotal || order.total)}</strong></span>
               </div>
+              ${order.bogoDiscount > 0 ? `
+                <div class="order-summary-row" style="color:#16a34a;font-weight:700;">
+                  <span>🎁 خصم 1+1=3 (${order.bogoFreeItems || 0} مجاناً):</span>
+                  <span>−${formatPrice(order.bogoDiscount)}</span>
+                </div>
+              ` : ''}
               <div class="order-summary-row">
                 <span>أجور التوصيل:</span>
                 <span><strong>${order.shipping > 0 ? formatPrice(order.shipping) : 'مجاني 🎉'}</strong></span>
