@@ -3849,3 +3849,215 @@ body.theme-classic .bogo-badge {
   border-radius: 4px;
   letter-spacing: 1px;
 }
+
+/* ============================================================
+   خيارات المنتج
+   ============================================================ */
+
+/* في نموذج الأدمن */
+.product-options-section {
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.product-options-header h4 {
+  font-size: 15px;
+  font-weight: 900;
+  color: #0c4a6e;
+  margin-bottom: 4px;
+}
+
+.options-hint {
+  font-size: 12px;
+  color: #075985;
+  margin-bottom: 12px;
+}
+
+.no-options {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.option-group {
+  background: white;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.option-group-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.option-group-name {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.btn-remove-group {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.option-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-value-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.option-value-row input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 120px;
+}
+
+.btn-remove-val {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: #fef2f2;
+  color: #dc2626;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.btn-add-value {
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px dashed #0284c7;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-add-option-group {
+  width: 100%;
+  background: white;
+  color: #0284c7;
+  border: 2px dashed #0284c7;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.btn-add-option-group:hover {
+  background: #0284c7;
+  color: white;
+}
+
+/* في تفاصيل المنتج (للزبون) */
+.product-option-selectors {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.option-selector {
+  margin-bottom: 12px;
+}
+
+.option-selector:last-child {
+  margin-bottom: 0;
+}
+
+.option-selector-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.option-selector-label .req {
+  color: var(--primary);
+}
+
+.option-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-btn {
+  background: white;
+  border: 2px solid var(--border);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text);
+}
+
+.option-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.option-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+/* في السلة */
+.cart-item-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+
+.cart-option-tag {
+  font-size: 11px;
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+}
