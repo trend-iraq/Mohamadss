@@ -137,6 +137,7 @@ const state = {
   orders: [],
   categories: [...DEFAULT_CATEGORIES],
   coupons: [],                    // الكوبونات
+  reviews: [],                    // التقييمات
   appliedCoupon: null,            // الكوبون المطبّق حالياً
   cart: [],
   wishlist: [],                   // المفضلة (تُحفظ في localStorage)
@@ -238,6 +239,81 @@ async function loadCategories() {
   }
 }
 
+// ===== التقييمات =====
+async function submitReview(productId, reviewData) {
+  try {
+    const review = {
+      productId,
+      ...reviewData,
+      createdAt: serverTimestamp(),
+      _localCreatedAt: Date.now(),
+      approved: false  // تحتاج موافقة الأدمن قبل الظهور
+    };
+    await addDoc(collection(db, 'reviews'), review);
+    return true;
+  } catch (err) {
+    console.error('فشل إرسال التقييم:', err);
+    return false;
+  }
+}
+
+async function loadReviews() {
+  try {
+    const snap = await getDocs(collection(db, 'reviews'));
+    state.reviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    state.reviews = [];
+  }
+}
+
+function getProductReviews(productId, onlyApproved = true) {
+  return state.reviews.filter(r => 
+    r.productId === productId && (!onlyApproved || r.approved)
+  );
+}
+
+function getProductRating(productId) {
+  const reviews = getProductReviews(productId, true);
+  if (reviews.length === 0) return { avg: 0, count: 0 };
+  const sum = reviews.reduce((s, r) => s + (r.rating || 0), 0);
+  return {
+    avg: sum / reviews.length,
+    count: reviews.length
+  };
+}
+
+async function approveReview(reviewId, approved = true) {
+  try {
+    await updateDoc(doc(db, 'reviews', reviewId), { approved });
+    const r = state.reviews.find(x => x.id === reviewId);
+    if (r) r.approved = approved;
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function deleteReview(reviewId) {
+  try {
+    await deleteDoc(doc(db, 'reviews', reviewId));
+    state.reviews = state.reviews.filter(r => r.id !== reviewId);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+// رسم النجوم
+function renderStars(rating, size = 'md', interactive = false) {
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    const filled = rating >= i;
+    const half = !filled && rating >= i - 0.5;
+    stars.push(`<span class="star ${filled ? 'filled' : half ? 'half' : ''} ${interactive ? 'interactive' : ''}" ${interactive ? `data-star="${i}"` : ''}>★</span>`);
+  }
+  return `<span class="stars stars-${size}">${stars.join('')}</span>`;
+}
+
 // ===== الكوبونات =====
 async function loadCoupons() {
   try {
@@ -298,6 +374,8 @@ function toggleWishlist(productId) {
   } else {
     state.wishlist.push(productId);
     showToast('❤️ تمت الإضافة للمفضلة');
+    const product = state.products.find(p => p.id === productId);
+    if (product) trackAddToWishlist(product);
   }
   saveLocal('trendiraq_wishlist', state.wishlist);
 }
@@ -398,6 +476,30 @@ function subscribeOrders() {
   state.unsubscribers.push(unsub);
 }
 
+function subscribeReviews() {
+  const unsub = onSnapshot(collection(db, 'reviews'), (snap) => {
+    const newReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    // إشعار صوتي عند تقييم جديد للأدمن
+    if (state.user && state.reviews.length > 0 && newReviews.length > state.reviews.length && state.settings.soundOnNewOrder) {
+      const newOnes = newReviews.filter(n => !state.reviews.find(r => r.id === n.id));
+      if (newOnes.some(r => !r.approved)) {
+        playNewOrderSound();
+        showToast('⭐ تقييم جديد!');
+      }
+    }
+    
+    state.reviews = newReviews;
+    if (state.view === 'admin') renderAdmin();
+    else if (state.view === 'store') {
+      // تحديث النجوم على البطاقات إذا كانت مرئية
+      const productsSection = $('#products-section');
+      if (productsSection) render();
+    }
+  });
+  state.unsubscribers.push(unsub);
+}
+
 function unsubscribeAll() {
   state.unsubscribers.forEach(fn => fn && fn());
   state.unsubscribers = [];
@@ -484,6 +586,76 @@ async function deleteOrder(id) {
 }
 
 // ===== السلة =====
+// ===== Facebook Pixel Tracking =====
+function fbTrack(event, params = {}) {
+  try {
+    if (typeof fbq !== 'undefined') {
+      fbq('track', event, params);
+      console.log('📊 FB Pixel:', event, params);
+    }
+  } catch (err) {
+    console.warn('Pixel error:', err);
+  }
+}
+
+function trackViewContent(product) {
+  fbTrack('ViewContent', {
+    content_ids: [product.id],
+    content_name: product.name,
+    content_type: 'product',
+    value: product.price,
+    currency: 'IQD'
+  });
+}
+
+function trackAddToCart(product, qty = 1) {
+  fbTrack('AddToCart', {
+    content_ids: [product.id],
+    content_name: product.name,
+    content_type: 'product',
+    value: product.price * qty,
+    currency: 'IQD',
+    contents: [{ id: product.id, quantity: qty, item_price: product.price }]
+  });
+}
+
+function trackInitiateCheckout() {
+  const total = cartTotal() - cartBogoDiscount() - getCouponDiscount();
+  fbTrack('InitiateCheckout', {
+    content_ids: state.cart.map(i => i.id),
+    contents: state.cart.map(i => ({ id: i.id, quantity: i.qty, item_price: i.price })),
+    num_items: state.cart.reduce((s, i) => s + i.qty, 0),
+    value: total,
+    currency: 'IQD'
+  });
+}
+
+function trackPurchase(order) {
+  fbTrack('Purchase', {
+    content_ids: (order.items || []).map(i => i.id),
+    contents: (order.items || []).map(i => ({ id: i.id, quantity: i.qty, item_price: i.price })),
+    num_items: (order.items || []).reduce((s, i) => s + i.qty, 0),
+    value: order.total || 0,
+    currency: 'IQD'
+  });
+}
+
+function trackSearch(query) {
+  if (!query || query.length < 2) return;
+  fbTrack('Search', {
+    search_string: query
+  });
+}
+
+function trackAddToWishlist(product) {
+  fbTrack('AddToWishlist', {
+    content_ids: [product.id],
+    content_name: product.name,
+    value: product.price,
+    currency: 'IQD'
+  });
+}
+
 function addToCart(product, selectedOptions = {}) {
   const mainImage = (product.images && product.images[0]) || product.image || '';
   // معرّف فريد للمنتج+الخيارات (نفس المنتج بخيارين مختلفين = منتجين منفصلين في السلة)
@@ -509,6 +681,7 @@ function addToCart(product, selectedOptions = {}) {
   }
   showToast('✓ تمت الإضافة إلى السلة');
   updateCartBadge();
+  trackAddToCart(product);
 }
 
 // اطلب الآن: شراء سريع لمنتج واحد فقط (يتجاوز السلة)
@@ -544,6 +717,7 @@ function buyNow(product, selectedOptions = {}) {
   } else {
     showCheckoutChoice(true);
   }
+  trackInitiateCheckout();
 }
 
 // استرجاع السلة بعد إلغاء الطلب السريع
@@ -910,6 +1084,11 @@ function renderProductCard(p) {
       </div>
       <div class="product-info">
         <h4 class="product-name" data-product-id="${p.id}" data-action="view-product">${escapeHtml(p.name)}</h4>
+        ${state.settings.reviewsEnabled && (() => {
+          const rating = getProductRating(p.id);
+          if (rating.count === 0) return '';
+          return `<div class="card-rating">${renderStars(rating.avg, 'sm')}<span class="rating-count">(${rating.count})</span></div>`;
+        })()}
         ${state.settings.showProductCounter && (sales > 0 || lowStock) ? `
           <div class="product-stats">
             ${sales > 0 ? `<span class="stat-sold">🛒 تم بيع ${sales}+</span>` : ''}
@@ -934,7 +1113,10 @@ function attachStoreEvents() {
   $('#searchInput')?.addEventListener('input', (e) => {
     state.search = e.target.value;
     clearTimeout(window._searchTimer);
-    window._searchTimer = setTimeout(() => render(), 250);
+    window._searchTimer = setTimeout(() => {
+      render();
+      if (state.search.length >= 3) trackSearch(state.search);
+    }, 250);
   });
   
   document.querySelectorAll('[data-cat]').forEach(b => {
@@ -1210,6 +1392,128 @@ function renderTrackOrderModal() {
 }
 
 // ===== الأسئلة الشائعة Modal =====
+// ===== نموذج كتابة التقييم =====
+function showReviewForm(product) {
+  let selectedRating = 5;
+  
+  const html = `
+    <div class="modal-overlay" data-overlay style="z-index:200;">
+      <div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+          <h3>⭐ قيّم المنتج</h3>
+          <button class="close-btn" data-close>×</button>
+        </div>
+        <div class="modal-body">
+          <div class="review-product-preview">
+            <img src="${escapeHtml((product.images?.[0]) || product.image || '')}" alt="" />
+            <div>
+              <h5>${escapeHtml(product.name)}</h5>
+              <div class="price-current">${formatPrice(product.price)}</div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>تقييمك <span class="req">*</span></label>
+            <div class="rating-input" id="ratingInput">
+              ${[1,2,3,4,5].map(i => `
+                <span class="star-input ${i <= 5 ? 'active' : ''}" data-rating="${i}">★</span>
+              `).join('')}
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);text-align:center;margin-top:6px;" id="ratingLabel">ممتاز ⭐⭐⭐⭐⭐</p>
+          </div>
+          
+          <div class="form-group">
+            <label>اسمك <span class="req">*</span></label>
+            <input type="text" id="reviewName" placeholder="مثال: أحمد محمد" />
+          </div>
+          
+          <div class="form-group">
+            <label>تعليقك (اختياري)</label>
+            <textarea id="reviewComment" rows="3" placeholder="شاركنا رأيك بالمنتج..."></textarea>
+          </div>
+          
+          <div id="reviewError"></div>
+          
+          <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px;font-size:12px;color:#92400e;">
+            ⚠️ سيظهر تقييمك بعد مراجعته من إدارة المتجر
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-checkout" id="submitReviewBtn">📤 إرسال التقييم</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  
+  // إغلاق
+  document.querySelectorAll('.modal-overlay[style*="z-index:200"] [data-close], .modal-overlay[style*="z-index:200"][data-overlay]').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target === el) {
+        el.closest('.modal-overlay').remove();
+      }
+    });
+  });
+  
+  // تفاعل النجوم
+  const labels = ['', 'سيء 😞', 'متوسط 🙁', 'جيد 🙂', 'جيد جداً 😊', 'ممتاز 🤩'];
+  const labelStars = ['', '⭐', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '⭐⭐⭐⭐⭐'];
+  
+  document.querySelectorAll('#ratingInput .star-input').forEach(star => {
+    star.addEventListener('click', () => {
+      selectedRating = parseInt(star.dataset.rating);
+      document.querySelectorAll('#ratingInput .star-input').forEach((s, i) => {
+        s.classList.toggle('active', i < selectedRating);
+      });
+      $('#ratingLabel').textContent = `${labels[selectedRating]} ${labelStars[selectedRating]}`;
+    });
+    
+    // hover effect
+    star.addEventListener('mouseenter', () => {
+      const r = parseInt(star.dataset.rating);
+      document.querySelectorAll('#ratingInput .star-input').forEach((s, i) => {
+        s.classList.toggle('hover', i < r);
+      });
+    });
+    star.addEventListener('mouseleave', () => {
+      document.querySelectorAll('#ratingInput .star-input').forEach(s => s.classList.remove('hover'));
+    });
+  });
+  
+  // إرسال
+  $('#submitReviewBtn').addEventListener('click', async () => {
+    const name = $('#reviewName').value.trim();
+    const comment = $('#reviewComment').value.trim();
+    
+    if (!name) {
+      $('#reviewError').innerHTML = '<div class="error-msg">⚠️ الرجاء إدخال اسمك</div>';
+      return;
+    }
+    
+    const btn = $('#submitReviewBtn');
+    btn.disabled = true;
+    btn.textContent = 'جاري الإرسال...';
+    
+    const ok = await submitReview(product.id, {
+      name,
+      comment,
+      rating: selectedRating
+    });
+    
+    if (ok) {
+      // إغلاق النموذج
+      document.querySelectorAll('.modal-overlay[style*="z-index:200"]').forEach(el => el.remove());
+      showToast('✓ شكراً لك! سيظهر تقييمك بعد المراجعة');
+      // تحديث التقييمات
+      await loadReviews();
+    } else {
+      $('#reviewError').innerHTML = '<div class="error-msg">⚠️ فشل الإرسال، حاول مرة أخرى</div>';
+      btn.disabled = false;
+      btn.textContent = '📤 إرسال التقييم';
+    }
+  });
+}
+
 function renderFaqModal() {
   closeModal();
   const faqs = state.settings.faqs || [];
@@ -1263,6 +1567,7 @@ function closeModal() {
 
 function showProductModal(p) {
   closeModal();
+  trackViewContent(p);
   const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const placeholderImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23e7e5e4" width="100" height="100"/></svg>';
   
@@ -1375,6 +1680,46 @@ function showProductModal(p) {
                 🛒 أضف للسلة
               </button>
             </div>
+            
+            ${state.settings.reviewsEnabled ? `
+              <div class="reviews-section" id="reviewsSection">
+                <div class="reviews-header">
+                  <h4>⭐ تقييمات الزبائن</h4>
+                  ${(() => {
+                    const r = getProductRating(p.id);
+                    return r.count > 0 ? `
+                      <div class="reviews-summary">
+                        <div class="reviews-avg">${r.avg.toFixed(1)}</div>
+                        <div>
+                          ${renderStars(r.avg, 'md')}
+                          <div class="reviews-count">${r.count} تقييم</div>
+                        </div>
+                      </div>
+                    ` : '<p style="color:var(--text-muted);font-size:13px;">لا توجد تقييمات بعد. كن أول من يقيّم!</p>';
+                  })()}
+                </div>
+                
+                <div class="reviews-list" id="reviewsList">
+                  ${(() => {
+                    const reviews = getProductReviews(p.id, true);
+                    if (reviews.length === 0) return '';
+                    return reviews.slice(0, 5).map(r => `
+                      <div class="review-item">
+                        <div class="review-header">
+                          <div class="review-author">${escapeHtml(r.name || 'زبون')}</div>
+                          ${renderStars(r.rating || 5, 'sm')}
+                        </div>
+                        ${r.comment ? `<p class="review-comment">${escapeHtml(r.comment)}</p>` : ''}
+                      </div>
+                    `).join('');
+                  })()}
+                </div>
+                
+                <button class="btn-add-review" id="openReviewFormBtn" data-product-id="${p.id}">
+                  ✍️ اكتب تقييمك
+                </button>
+              </div>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -1400,6 +1745,10 @@ function showProductModal(p) {
     if (selectedOptions === null) return;
     closeModal();
     buyNow(p, selectedOptions);
+  });
+  
+  $('#openReviewFormBtn')?.addEventListener('click', () => {
+    showReviewForm(p);
   });
   
   // جمع الخيارات المختارة من الأزرار
@@ -1607,6 +1956,7 @@ function renderCart() {
   
   $('[data-checkout]')?.addEventListener('click', () => {
     if (state.cart.length === 0) return;
+    trackInitiateCheckout();
     const s = state.settings;
     if (s.directCheckoutEnabled && !s.whatsappCheckoutEnabled) {
       showDirectCheckout();
@@ -1844,6 +2194,7 @@ function showDirectCheckout(isBuyNow = false) {
 
 function showOrderSuccess(order, customerInfo) {
   closeModal();
+  trackPurchase(order);
   const html = `
     <div class="modal-overlay" data-overlay>
       <div class="modal" style="max-width:440px;">
@@ -1979,7 +2330,8 @@ function renderAdmin() {
               {id:'coupons',label:'الكوبونات',icon:'🏷️'},
               {id:'analytics',label:'الإحصائيات',icon:'📈'},
               {id:'customers',label:'الزبائن',icon:'👥'},
-              {id:'content',label:'المحتوى',icon:'📝'}
+              {id:'content',label:'المحتوى',icon:'📝'},
+              {id:'reviews',label:'التقييمات',icon:'⭐'}
             ].map(t => `
               <button class="admin-tab ${adminTab === t.id ? 'active' : ''}" data-admin-tab="${t.id}">
                 ${t.icon} ${t.label}
@@ -2018,6 +2370,7 @@ function renderAdmin() {
   else if (adminTab === 'analytics') renderAdminAnalytics();
   else if (adminTab === 'customers') renderAdminCustomers();
   else if (adminTab === 'content') renderAdminContent();
+  else if (adminTab === 'reviews') renderAdminReviews();
 }
 
 function renderAdminDashboard() {
@@ -3961,6 +4314,126 @@ function renderAdminContent() {
   });
 }
 
+// ===== إدارة التقييمات =====
+function renderAdminReviews() {
+  const all = state.reviews || [];
+  const pending = all.filter(r => !r.approved);
+  const approved = all.filter(r => r.approved);
+  
+  // ربط كل تقييم بمنتجه
+  function getProductInfo(productId) {
+    const p = state.products.find(x => x.id === productId);
+    return p ? { name: p.name, image: (p.images?.[0]) || p.image || '' } : { name: 'منتج محذوف', image: '' };
+  }
+  
+  function renderReviewCard(r, isPending) {
+    const info = getProductInfo(r.productId);
+    const date = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('ar') : '';
+    return `
+      <div class="review-admin-card ${isPending ? 'pending' : 'approved'}">
+        <div class="review-admin-product">
+          <img src="${escapeHtml(info.image)}" alt="" onerror="this.style.opacity=0.3" />
+          <div class="review-admin-product-name">${escapeHtml(info.name)}</div>
+        </div>
+        <div class="review-admin-content">
+          <div class="review-admin-header">
+            <div>
+              <strong>${escapeHtml(r.name || 'زبون')}</strong>
+              ${renderStars(r.rating || 5, 'sm')}
+            </div>
+            <span class="review-date">${date}</span>
+          </div>
+          ${r.comment ? `<p class="review-comment">${escapeHtml(r.comment)}</p>` : '<p style="color:var(--text-muted);font-size:13px;">بدون تعليق</p>'}
+          <div class="review-admin-actions">
+            ${isPending ? `
+              <button class="btn-approve-review" data-approve="${r.id}">✅ موافقة وعرض</button>
+            ` : `
+              <button class="btn-unapprove-review" data-unapprove="${r.id}">⏸️ إخفاء</button>
+            `}
+            <button class="btn-delete-review" data-delete-review="${r.id}">🗑️ حذف</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  $('#adminContent').innerHTML = `
+    <div class="settings-card">
+      <h3>⭐ التقييمات (${all.length})</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+        راجع التقييمات قبل ظهورها للزبائن. التقييمات السلبية يمكنك حذفها.
+      </p>
+      
+      <div class="reviews-stats-row">
+        <div class="review-stat-item" style="background:#fef3c7;color:#92400e;">
+          <div class="rs-num">${pending.length}</div>
+          <div class="rs-label">في الانتظار</div>
+        </div>
+        <div class="review-stat-item" style="background:#d1fae5;color:#065f46;">
+          <div class="rs-num">${approved.length}</div>
+          <div class="rs-label">مقبولة</div>
+        </div>
+        <div class="review-stat-item" style="background:#dbeafe;color:#1e40af;">
+          <div class="rs-num">${all.length > 0 ? (all.reduce((s,r) => s+(r.rating||0), 0) / all.length).toFixed(1) : '0.0'}</div>
+          <div class="rs-label">متوسط النجوم</div>
+        </div>
+      </div>
+    </div>
+    
+    ${pending.length > 0 ? `
+      <div class="settings-card">
+        <h3>⏳ في انتظار الموافقة (${pending.length})</h3>
+        ${pending.map(r => renderReviewCard(r, true)).join('')}
+      </div>
+    ` : ''}
+    
+    <div class="settings-card">
+      <h3>✅ التقييمات المعروضة (${approved.length})</h3>
+      ${approved.length === 0 ? '<p class="no-options">لا توجد تقييمات معروضة بعد</p>' : 
+        approved.map(r => renderReviewCard(r, false)).join('')}
+    </div>
+  `;
+  
+  // معالجات
+  document.querySelectorAll('[data-approve]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const id = b.dataset.approve;
+      b.disabled = true;
+      const ok = await approveReview(id, true);
+      if (ok) {
+        showToast('✓ تمت الموافقة');
+        renderAdminReviews();
+      } else {
+        b.disabled = false;
+        showToast('فشلت العملية', 'error');
+      }
+    });
+  });
+  
+  document.querySelectorAll('[data-unapprove]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const id = b.dataset.unapprove;
+      const ok = await approveReview(id, false);
+      if (ok) {
+        showToast('تم الإخفاء');
+        renderAdminReviews();
+      }
+    });
+  });
+  
+  document.querySelectorAll('[data-delete-review]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('حذف هذا التقييم نهائياً؟')) return;
+      const id = b.dataset.deleteReview;
+      const ok = await deleteReview(id);
+      if (ok) {
+        showToast('تم الحذف');
+        renderAdminReviews();
+      }
+    });
+  });
+}
+
 // ===== التهيئة =====
 async function init() {
   // مراقبة حالة تسجيل الدخول
@@ -3969,6 +4442,7 @@ async function init() {
     if (user) {
       // تم تسجيل الدخول كأدمن
       subscribeOrders();
+      subscribeReviews();
       if (state.view !== 'admin') {
         state.view = 'admin';
       }
@@ -3979,6 +4453,7 @@ async function init() {
       // إلغاء اشتراك الطلبات
       unsubscribeAll();
       subscribeProducts();
+      subscribeReviews();
       render();
     }
   });
@@ -3987,6 +4462,7 @@ async function init() {
   await loadSettings();
   await loadCategories();
   await loadCoupons();
+  await loadReviews();
   loadLocalData();
   // تطبيق الوضع الليلي إن كان مفعلاً
   if (state.darkMode) document.body.classList.add('user-dark-mode');
@@ -3994,6 +4470,7 @@ async function init() {
   // إذا لم يكن هناك مستخدم، حمل المنتجات وارسم المتجر
   if (!state.user) {
     subscribeProducts();
+    subscribeReviews();
     render();
   }
   
