@@ -1,6 +1,15 @@
-// إعدادات Firebase الخاصة بمشروع ترند العراق
+// ============================================
+//  إعدادات Firebase - ترند العراق
+//  التعديل الأهم: تفعيل الكاش المحلي الدائم
+//  حتى تظهر المنتجات فوراً في الزيارات اللاحقة
+// ============================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -14,6 +23,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// الكاش الدائم (IndexedDB): الزيارة الثانية تعرض المنتجات من الجهاز فوراً
+// ثم تُحدَّث من السيرفر في الخلفية. هذا يقضي على تأخير الثانية عند الدخول.
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (err) {
+  // متصفح قديم أو وضع تصفح متخفٍّ لا يدعم IndexedDB
+  console.warn('تعذّر تفعيل الكاش الدائم، سيتم استخدام الذاكرة فقط:', err);
+  db = getFirestore(app);
+}
+
+export { db, app };
 export const auth = getAuth(app);
-export { app };

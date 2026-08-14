@@ -3,76 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-  <meta name="description" content="ترند العراق - متجرك الأول للموضة والتقنية" />
-  <meta name="theme-color" content="#dc2626" />
+  <meta name="description" content="ترند العراق - متجرك الأول للموضة والتقنية. توصيل لجميع المحافظات والدفع عند الاستلام." />
+  <meta name="theme-color" content="#dc2626" id="themeColorMeta" />
   <title>ترند العراق - متجرك الأول</title>
-  
-  <!-- تحسين الاتصال المبكر بالخوادم المستخدمة (يوفر وقت DNS/TLS لاحقاً) -->
+
+  <!-- فتح الاتصالات مبكراً لتسريع التحميل -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://firestore.googleapis.com">
-  <link rel="preconnect" href="https://storage.bunnycdn.com">
-  <link rel="preconnect" href="https://trendiraq.b-cdn.net">
-  <link rel="dns-prefetch" href="https://connect.facebook.net">
-  
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-  
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://trendiraq.b-cdn.net" crossorigin>
+
+  <!-- الخطوط: أوزان أقل = تحميل أسرع -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&family=Cairo:wght@700;900&display=swap" rel="stylesheet">
+
+  <!-- ملف التنسيقات: رابط ثابت حتى يستفيد من الكاش. غيّر الرقم فقط عند تعديل الملف -->
+  <link rel="stylesheet" href="styles.css?v=2" />
+
   <link rel="icon" type="image/webp" href="assets/logo.webp" />
-  
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="assets/icon-180.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="ترند العراق" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  
-  <!-- Meta Pixel Code -->
-  <script>
-  !function(f,b,e,v,n,t,s)
-  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)}(window, document,'script',
-  'https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init', '2066685650951066');
-  fbq('track', 'PageView');
-  </script>
-  <noscript><img height="1" width="1" style="display:none"
-  src="https://www.facebook.com/tr?id=2066685650951066&ev=PageView&noscript=1"
-  /></noscript>
-  <!-- End Meta Pixel Code -->
-  
-  <!-- ملاحظة مهمة: رقم الإصدار هذا يُستخدم لتحديث الكاش عند نشر تعديلات جديدة فقط.
-       بين التحديثات، يستفيد الزوار من الكاش الكامل للمتصفح (تحميل أسرع بكثير للزيارات المتكررة).
-       عند تسليم ملفات محدّثة مستقبلاً، سيتم تغيير هذا الرقم تلقائياً. -->
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="preload" as="image" href="assets/logo.webp" />
+
+  <!-- تحميل مسبق للسكربتات (يبدأ التنزيل قبل التنفيذ) -->
+  <link rel="modulepreload" href="firebase-config.js?v=2" />
+  <link rel="modulepreload" href="app.js?v=2" />
+
+  <!-- تنسيقات حرجة مضمّنة: تظهر فوراً حتى قبل تحميل styles.css -->
+  <style>
+    :root { --primary:#dc2626; --bg:#fafaf9; --border:#e7e5e4; }
+    html { background: var(--bg); }
+    body { margin:0; font-family:'Tajawal',system-ui,sans-serif; background:var(--bg); }
+    .boot { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+            justify-content:center; gap:16px; background:var(--bg); z-index:9999; }
+    .boot img { width:96px; height:96px; object-fit:contain; border-radius:20px; }
+    .boot .sp { width:44px; height:44px; border:4px solid var(--border);
+                border-top-color:var(--primary); border-radius:50%; animation:bspin .8s linear infinite; }
+    .boot p { color:#78716c; font-size:14px; margin:0; }
+    @keyframes bspin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
-  <!-- شاشة الترحيب -->
-  <div id="loadingScreen" class="welcome-screen">
-    <div class="welcome-bg-pattern"></div>
-    <div class="welcome-content">
-      <div class="welcome-logo-wrapper">
-        <div class="welcome-glow"></div>
-        <img src="assets/logo.webp" alt="ترند العراق" class="welcome-logo" />
-      </div>
-      <h1 class="welcome-title">ترند العراق</h1>
-      <p class="welcome-subtitle">TREND IRAQ</p>
-      <div class="welcome-tagline">وجهتك الأولى للتسوق</div>
-      <div class="welcome-loader">
-        <span></span><span></span><span></span>
-      </div>
-    </div>
+  <!-- شاشة التحميل -->
+  <div id="loadingScreen" class="boot">
+    <img src="assets/logo.webp" alt="ترند العراق" width="96" height="96" />
+    <div class="sp"></div>
+    <p>جاري التحميل...</p>
   </div>
 
   <!-- التطبيق -->
   <div id="app" style="display:none;"></div>
 
-  <!-- Firebase SDKs -->
-  <script type="module" src="firebase-config.js?v=2"></script>
+  <!-- نقطة الدخول الوحيدة. app.js يستورد firebase-config.js بنفسه -->
   <script type="module" src="app.js?v=2"></script>
+
+  <!-- رسالة احتياطية إذا فشل تحميل السكربت خلال 12 ثانية -->
+  <script>
+    setTimeout(function () {
+      var ls = document.getElementById('loadingScreen');
+      if (ls && ls.style.display !== 'none' && !window.__storeReady) {
+        ls.innerHTML = '<div style="text-align:center;padding:24px;font-family:Tajawal,sans-serif;">' +
+          '<div style="font-size:48px;margin-bottom:12px;">⚠️</div>' +
+          '<h3 style="color:#dc2626;margin:0 0 8px;">تعذّر تحميل المتجر</h3>' +
+          '<p style="color:#78716c;margin:0 0 16px;">تأكد من اتصالك بالإنترنت</p>' +
+          '<button onclick="location.reload()" style="background:#dc2626;color:#fff;border:none;' +
+          'padding:12px 24px;border-radius:12px;font-family:inherit;font-size:15px;">إعادة المحاولة</button></div>';
+      }
+    }, 12000);
+  </script>
 </body>
 </html>
