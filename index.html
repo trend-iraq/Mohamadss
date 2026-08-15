@@ -18,14 +18,28 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&family=Cairo:wght@700;900&display=swap" rel="stylesheet">
 
   <!-- ملف التنسيقات: رابط ثابت حتى يستفيد من الكاش. غيّر الرقم فقط عند تعديل الملف -->
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=3" />
 
   <link rel="icon" type="image/webp" href="assets/logo.webp" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
+  <link rel="manifest" href="manifest.json?v=3" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="ترند العراق" />
+
+  <!-- معاينة الروابط عند المشاركة -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ترند العراق" />
+  <meta property="og:title" content="ترند العراق - متجرك الأول" />
+  <meta property="og:description" content="توصيل لجميع المحافظات والدفع عند الاستلام" />
+  <meta property="og:image" content="assets/logo.webp" />
+  <meta property="og:locale" content="ar_IQ" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="preload" as="image" href="assets/logo.webp" />
 
   <!-- تحميل مسبق للسكربتات (يبدأ التنزيل قبل التنفيذ) -->
-  <link rel="modulepreload" href="firebase-config.js?v=2" />
-  <link rel="modulepreload" href="app.js?v=2" />
+  <link rel="modulepreload" href="firebase-config.js?v=3" />
+  <link rel="modulepreload" href="app.js?v=3" />
 
   <!-- تنسيقات حرجة مضمّنة: تظهر فوراً حتى قبل تحميل styles.css -->
   <style>
@@ -53,7 +67,7 @@
   <div id="app" style="display:none;"></div>
 
   <!-- نقطة الدخول الوحيدة. app.js يستورد firebase-config.js بنفسه -->
-  <script type="module" src="app.js?v=2"></script>
+  <script type="module" src="app.js?v=3"></script>
 
   <!-- رسالة احتياطية إذا فشل تحميل السكربت خلال 12 ثانية -->
   <script>

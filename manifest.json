@@ -1,27 +1,19 @@
 {
-  "name": "ترند العراق - Trend Iraq",
+  "name": "ترند العراق - متجرك الأول",
   "short_name": "ترند العراق",
-  "description": "وجهتك الأولى للموضة والتقنية في العراق",
-  "start_url": "./",
+  "description": "متجر عراقي - توصيل لجميع المحافظات والدفع عند الاستلام",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#1c1f2e",
+  "background_color": "#fafaf9",
   "theme_color": "#dc2626",
-  "lang": "ar",
   "dir": "rtl",
+  "lang": "ar",
+  "categories": ["shopping"],
   "icons": [
-    {
-      "src": "assets/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "assets/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

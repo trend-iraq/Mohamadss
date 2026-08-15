@@ -11,7 +11,7 @@
 import { db, auth } from './firebase-config.js';
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, orderBy, limit, onSnapshot, serverTimestamp
+  query, where, orderBy, limit, onSnapshot, serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, onAuthStateChanged, signOut
@@ -52,6 +52,10 @@ const DEFAULT_SETTINGS = {
   whatsappCheckoutEnabled:true, directCheckoutEnabled:true,
   heroEnabled:true, heroBadge:'🔥 التريند الآن في العراق', heroTitle:'اكتشف أحدث صيحات الموضة',
   announcementEnabled:true, announcementText:'🚚 توصيل لجميع المحافظات • 💵 الدفع عند الاستلام • 🔥 خصومات تصل إلى 30%',
+  reviewsEnabled:true, trackingEnabled:true, relatedEnabled:true,
+  pageAbout:'نحن متجر عراقي متخصص بتوفير منتجات أصلية بأسعار منافسة، مع توصيل لجميع المحافظات والدفع عند الاستلام.',
+  pageReturns:'يحق لك استبدال أو إرجاع المنتج خلال 7 أيام من الاستلام بشرط بقائه بحالته الأصلية مع الغلاف.\nكلفة الإرجاع تكون على المتجر إذا كان العيب من المنتج، وعلى الزبون إذا كان الإرجاع لتغيير الرأي.\nللإرجاع تواصل معنا عبر واتساب مع رقم الطلب.',
+  pageFaq:'كيف أطلب؟|اختر المنتج، أضفه للسلة، ثم اضغط إتمام الطلب واملأ معلوماتك. سنتصل بك للتأكيد.\nمتى يصل الطلب؟|عادة من 2 إلى 5 أيام حسب المحافظة.\nكيف أدفع؟|الدفع نقداً عند الاستلام.\nهل أستطيع الإرجاع؟|نعم خلال 7 أيام حسب سياسة الاستبدال.\nكيف أتابع طلبي؟|من زر تتبع الطلب أسفل الصفحة برقم الطلب ورقم هاتفك.',
 };
 
 const THEMES = {
@@ -86,6 +90,7 @@ const STATUS_MAP = {
 };
 
 const MAX_IMAGES = 5;
+const RELATED_COUNT = 4;
 const ORDERS_PAGE = 200;              // أقصى عدد طلبات تُحمّل في اللوحة
 const CART_KEY = 'ti_cart_v2';
 const SETTINGS_KEY = 'ti_settings_v2';
@@ -108,6 +113,13 @@ const state = {
   ordersUnsub: null,
   shellReady: false,
   firstPaintDone: false,
+  reviews: {},            // { productId: [reviews] }
+  reviewsUnsub: null,
+  pendingReviews: [],
+  pendingReviewsUnsub: null,
+  openProductId: null,
+  seenPendingOrders: null,
+  notifyReady: false,
 };
 
 // ============================================
@@ -129,9 +141,16 @@ function showToast(msg, type = 'success') {
   setTimeout(() => t.remove(), 2800);
 }
 
-// إنشاء مودال مع ربط الإغلاق تلقائياً (بدون تسريب مستمعات)
-function mountModal(html) {
-  closeModal();
+// ============================================
+//  المودالات + التحكم بزر الرجوع (History API)
+//  زر الرجوع بالموبايل يغلق النافذة بدل الخروج من الموقع
+// ============================================
+let modalHistoryOpen = false;
+
+function mountModal(html, opts = {}) {
+  const wasOpen = !!$('.modal-overlay');
+  removeModalDom();
+
   const wrap = document.createElement('div');
   wrap.innerHTML = html.trim();
   const overlay = wrap.firstElementChild;
@@ -140,16 +159,118 @@ function mountModal(html) {
     if (e.target === overlay || e.target.closest('[data-close]')) closeModal();
   });
   document.body.style.overflow = 'hidden';
+
+  // نافذة واحدة فقط في سجل التصفح: الرجوع يعود دائماً للمتجر
+  const url = opts.url || stripProductParam(location.href);
+  const st = { modal: opts.name || 'modal', productId: opts.productId || null };
+  try {
+    if (wasOpen) {
+      history.replaceState(st, '', url);          // استبدال نافذة بأخرى: عمق واحد فقط
+    } else if (opts.replace) {
+      history.replaceState(st, '', url);          // فتح من رابط مباشر: لا نضيف خطوة
+      modalHistoryOpen = false;
+    } else {
+      history.pushState(st, '', url);             // فتح عادي: الرجوع يغلق النافذة
+      modalHistoryOpen = true;
+    }
+  } catch (_) {}
+
+  if (opts.title) document.title = opts.title;
   return overlay;
 }
 
-function closeModal() {
+function removeModalDom() {
   $$('.modal-overlay, .cart-drawer').forEach(m => m.remove());
   document.body.style.overflow = '';
+  state.openProductId = null;
 }
 
-// إغلاق المودال بزر الرجوع / Escape
+function closeModal(fromPop = false) {
+  const had = !!$('.modal-overlay');
+  removeModalDom();
+  restoreDocumentTitle();
+  if (had && !fromPop) {
+    if (modalHistoryOpen) {
+      modalHistoryOpen = false;
+      try { history.back(); } catch (_) {}
+    } else {
+      // فُتحت النافذة من رابط مباشر: ننظّف الرابط بدل الخروج من الموقع
+      try { history.replaceState({}, '', stripProductParam(location.href)); } catch (_) {}
+    }
+  }
+  if (fromPop) modalHistoryOpen = false;
+}
+
+function stripProductParam(href) {
+  try {
+    const u = new URL(href);
+    u.searchParams.delete('p');
+    u.searchParams.delete('track');
+    u.searchParams.delete('page');
+    return u.pathname + (u.search || '') + u.hash;
+  } catch (_) { return href; }
+}
+
+function productUrl(id) {
+  try {
+    const u = new URL(location.href);
+    u.search = '';
+    u.searchParams.set('p', id);
+    return u.toString();
+  } catch (_) { return location.href; }
+}
+
+function restoreDocumentTitle() {
+  const s = state.settings;
+  document.title = `${s.storeName} - ${s.tagline || 'متجرك الأول'}`;
+  setMeta('description', s.tagline);
+}
+
+function setMeta(name, content) {
+  let el = document.querySelector(`meta[name="${name}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute('name', name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', String(content || ''));
+}
+
+// الرجوع بالموبايل: يغلق النافذة المفتوحة بدل الخروج من الموقع
+window.addEventListener('popstate', () => {
+  if ($('.modal-overlay')) {
+    closeModal(true);
+    return;
+  }
+  handleRoute(false);
+});
+
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// ============================================
+//  التوجيه: فتح المنتج من الرابط مباشرة
+// ============================================
+let routeHandled = false;
+
+function handleRoute(isInitial = true) {
+  const params = new URLSearchParams(location.search);
+  const pid = params.get('p');
+  const page = params.get('page');
+  const track = params.get('track');
+
+  if (pid) {
+    const p = state.products.find(x => x.id === pid);
+    if (p) { showProductModal(p, { replace: true }); return true; }
+    if (state.products.length > 0 && isInitial) {
+      showToast('هذا المنتج لم يعد متوفراً', 'error');
+      history.replaceState({}, '', stripProductParam(location.href));
+    }
+    return false;
+  }
+  if (track === '1') { showTrackingModal({ replace: true }); return true; }
+  if (page) { showInfoPage(page, { replace: true }); return true; }
+  return false;
+}
 
 // ============================================
 //  معالجة الوسائط + الرفع إلى CDN
@@ -286,6 +407,11 @@ function subscribeProducts() {
     if (state.view === 'store') renderStore();
     else renderAdmin();
     hideLoading();
+    if (!routeHandled && state.products.length) {
+      routeHandled = true;
+      handleRoute(true);
+      injectStructuredData();
+    }
   }, (err) => {
     console.error('خطأ في تحميل المنتجات:', err);
     hideLoading();
@@ -297,16 +423,98 @@ function subscribeOrders() {
   if (state.ordersUnsub || !state.user) return;
   const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(ORDERS_PAGE));
   state.ordersUnsub = onSnapshot(q, (snap) => {
-    state.orders = sortByCreated(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const fresh = sortByCreated(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    detectNewOrders(fresh);
+    state.orders = fresh;
     if (state.view === 'admin') renderAdmin();
   }, (err) => {
     console.error('خطأ في تحميل الطلبات:', err);
   });
 }
 
+function subscribePendingReviews() {
+  if (state.pendingReviewsUnsub || !state.user) return;
+  const q = query(collection(db, 'reviews'), where('approved', '==', false), limit(100));
+  state.pendingReviewsUnsub = onSnapshot(q, (snap) => {
+    state.pendingReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b._localCreatedAt || 0) - (a._localCreatedAt || 0));
+    if (state.view === 'admin') renderAdmin();
+  }, (err) => console.error('خطأ في تحميل التقييمات:', err));
+}
+
+function unsubscribePendingReviews() {
+  if (state.pendingReviewsUnsub) { state.pendingReviewsUnsub(); state.pendingReviewsUnsub = null; }
+  state.pendingReviews = [];
+}
+
+// ============================================
+//  تنبيه الطلبات الجديدة (صوت + إشعار)
+// ============================================
+function detectNewOrders(fresh) {
+  const ids = new Set(fresh.map(o => o.id));
+  if (state.seenPendingOrders === null) {
+    state.seenPendingOrders = ids;   // أول تحميل: لا تنبيه
+    return;
+  }
+  const incoming = fresh.filter(o => !state.seenPendingOrders.has(o.id) && o.status === 'pending');
+  state.seenPendingOrders = ids;
+  if (!incoming.length) return;
+
+  playChime();
+  const first = incoming[0];
+  const body = incoming.length === 1
+    ? `${first.customer?.name || ''} - ${formatPrice(first.total)} - ${first.customer?.governorate || ''}`
+    : `${incoming.length} طلبات جديدة`;
+  showBrowserNotification('🛒 طلب جديد!', body);
+  showToast(`🛒 وصل طلب جديد: ${formatPrice(first.total)}`);
+}
+
+// نغمة قصيرة بدون ملف صوتي خارجي
+function playChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notes = [880, 1174.7, 1318.5];
+    notes.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      const t = ctx.currentTime + i * 0.16;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.28, t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); osc.stop(t + 0.45);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 1600);
+  } catch (_) {}
+}
+
+function showBrowserNotification(title, body) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const n = new Notification(title, { body, icon: 'assets/logo.webp', tag: 'ti-order', renotify: true });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (_) {}
+}
+
+async function requestNotifyPermission() {
+  if (!('Notification' in window)) { showToast('متصفحك لا يدعم الإشعارات', 'error'); return; }
+  try {
+    const res = await Notification.requestPermission();
+    state.notifyReady = res === 'granted';
+    showToast(res === 'granted' ? '✓ تم تفعيل التنبيهات' : 'لم يتم السماح بالإشعارات', res === 'granted' ? 'success' : 'error');
+    playChime();
+    if (state.view === 'admin') renderAdmin();
+  } catch (_) {}
+}
+
 function unsubscribeOrders() {
   if (state.ordersUnsub) { state.ordersUnsub(); state.ordersUnsub = null; }
   state.orders = [];
+  state.seenPendingOrders = null;
 }
 
 // ============================================
@@ -356,6 +564,23 @@ async function createOrder(orderData) {
       ...orderData, orderNumber, status: 'pending',
       createdAt: serverTimestamp(), _localCreatedAt: Date.now()
     });
+
+    // مستند تتبّع خفيف بلا أي بيانات شخصية (الاسم/العنوان لا يُحفظان هنا)
+    try {
+      const verify = await hashPhone(orderData.customer?.phone || '');
+      await setDoc(doc(db, 'tracking', orderNumber), {
+        status: 'pending',
+        total: orderData.total || 0,
+        itemsCount: (orderData.items || []).length,
+        verify,
+        orderId: ref.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.warn('تعذّر إنشاء مستند التتبّع:', e);
+    }
+
     // نُرجع البيانات كاملة حتى يعمل زر "إرسال نسخة عبر واتساب"
     return { id: ref.id, orderNumber, ...orderData };
   } catch (err) {
@@ -365,8 +590,46 @@ async function createOrder(orderData) {
 }
 
 async function updateOrderStatus(id, status) {
-  try { await updateDoc(doc(db, 'orders', id), { status, updatedAt: serverTimestamp() }); return true; }
-  catch (err) { console.error(err); showToast('فشل التحديث', 'error'); return false; }
+  try {
+    const order = state.orders.find(o => o.id === id);
+    const prev = order?.status;
+    await updateDoc(doc(db, 'orders', id), { status, updatedAt: serverTimestamp() });
+
+    // مزامنة حالة التتبّع للزبون
+    if (order?.orderNumber) {
+      try {
+        await setDoc(doc(db, 'tracking', order.orderNumber),
+          { status, updatedAt: serverTimestamp() }, { merge: true });
+      } catch (e) { console.warn('تعذّر تحديث التتبّع:', e); }
+    }
+
+    // خصم المخزون تلقائياً عند تأكيد الطلب، وإرجاعه عند الإلغاء
+    if (order) await applyStockChange(order, prev, status);
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast('فشل التحديث', 'error');
+    return false;
+  }
+}
+
+// المخزون يُخصم عند التأكيد فقط (وليس عند إنشاء الطلب) حتى لا يتلاعب أحد به من المتجر
+async function applyStockChange(order, prevStatus, newStatus) {
+  const consuming = ['confirmed', 'shipped', 'delivered'];
+  const wasConsuming = consuming.includes(prevStatus);
+  const isConsuming = consuming.includes(newStatus);
+  if (wasConsuming === isConsuming) return;
+
+  const sign = isConsuming ? -1 : 1;
+  const jobs = (order.items || []).map(async (it) => {
+    try {
+      const p = state.products.find(x => x.id === it.id);
+      if (!p || typeof p.stock !== 'number') return;
+      await updateDoc(doc(db, 'products', it.id), { stock: increment(sign * (it.qty || 1)) });
+    } catch (e) { console.warn('تعذّر تعديل مخزون', it.id, e); }
+  });
+  await Promise.all(jobs);
+  showToast(isConsuming ? '✓ تم خصم الكميات من المخزون' : '✓ تم إرجاع الكميات للمخزون');
 }
 
 async function deleteOrder(id) {
@@ -608,6 +871,13 @@ function buildStoreShell() {
           <p>💵 الدفع نقداً عند الاستلام</p>
           <p>🚚 توصيل لجميع المحافظات الـ 19</p>
         </div>
+        <div class="footer-section">
+          <h5>خدمة الزبائن</h5>
+          ${s.trackingEnabled ? `<button class="footer-link" data-action="track-order">📦 تتبّع طلبك</button>` : ''}
+          <button class="footer-link" data-action="page-faq">❓ الأسئلة الشائعة</button>
+          <button class="footer-link" data-action="page-returns">🔄 سياسة الاستبدال</button>
+          <button class="footer-link" data-action="page-about">ℹ️ من نحن</button>
+        </div>
       </div>
       <div class="footer-bottom">© ${new Date().getFullYear()} ${escapeHtml(s.storeName)} - جميع الحقوق محفوظة</div>
     </footer>
@@ -753,15 +1023,20 @@ document.addEventListener('click', (e) => {
     else showAdminLoginModal();
   } else if (a === 'scroll-products') {
     $('#products-section')?.scrollIntoView({ behavior: 'smooth' });
+  } else if (a === 'track-order') {
+    showTrackingModal();
+  } else if (a && a.startsWith('page-')) {
+    showInfoPage(a.slice(5));
   }
 });
 
 // ============================================
 //  مودال المنتج
 // ============================================
-function showProductModal(p) {
+function showProductModal(p, opts = {}) {
   const discount = p.oldPrice && p.price ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const stock = productStock(p);
+  state.openProductId = p.id;
 
   const media = [];
   const imgs = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
@@ -769,13 +1044,20 @@ function showProductModal(p) {
   if (p.video) media.push({ type: 'video', src: p.video });
   if (!media.length) media.push({ type: 'image', src: PLACEHOLDER });
 
+  const related = state.settings.relatedEnabled
+    ? state.products
+        .filter(x => x.id !== p.id && x.category === p.category && productStock(x) > 0)
+        .slice(0, RELATED_COUNT)
+    : [];
+
   const overlay = mountModal(`
     <div class="modal-overlay">
       <div class="modal product-modal">
         <div class="product-detail">
           <div class="product-gallery">
             <button class="product-detail-close" data-close aria-label="إغلاق">×</button>
-            ${discount > 0 ? `<div class="discount-badge" style="position:absolute;top:12px;right:12px;font-size:14px;padding:6px 12px;z-index:3;">خصم ${discount}%</div>` : ''}
+            <button class="product-share-btn" id="shareProduct" aria-label="مشاركة">🔗</button>
+            ${discount > 0 ? `<div class="discount-badge" style="position:absolute;top:12px;right:56px;font-size:14px;padding:6px 12px;z-index:3;">خصم ${discount}%</div>` : ''}
             <div class="gallery-main" id="galleryMain">
               ${media.map((m, i) => `
                 <div class="gallery-slide" data-slide="${i}">
@@ -802,6 +1084,7 @@ function showProductModal(p) {
 
           <div class="product-detail-info">
             <h2>${escapeHtml(p.name)}</h2>
+            <div id="ratingSummary"></div>
             <div class="product-detail-prices">
               <span class="price-current">${formatPrice(p.price)}</span>
               ${p.oldPrice ? `<span class="price-old">${formatPrice(p.oldPrice)}</span>` : ''}
@@ -811,18 +1094,69 @@ function showProductModal(p) {
               <p>${stock > 0 ? `✓ متوفر${stock < 900 ? ` • ${stock} قطعة` : ''}` : '✕ نفد المخزون'}</p>
               <p class="small">💵 الدفع عند الاستلام • 🚚 توصيل لجميع المحافظات</p>
             </div>
-            <button class="btn-add-cart-large" id="addFromModal" ${stock <= 0 ? 'disabled' : ''}>
-              ${stock <= 0 ? 'غير متوفر حالياً' : '🛒 أضف للسلة'}
-            </button>
+            <div class="product-actions">
+              <button class="btn-add-cart-large" id="addFromModal" ${stock <= 0 ? 'disabled' : ''}>
+                ${stock <= 0 ? 'غير متوفر حالياً' : '🛒 أضف للسلة'}
+              </button>
+              <button class="btn-share-wide" id="shareProduct2">🔗 مشاركة المنتج</button>
+            </div>
           </div>
+
+          ${state.settings.reviewsEnabled ? `
+            <div class="reviews-section" id="reviewsSection">
+              <div class="reviews-header">
+                <h3>التقييمات</h3>
+                <button class="btn-write-review" id="writeReview">✍️ أضف تقييمك</button>
+              </div>
+              <div id="reviewsList"><div class="reviews-loading">جاري تحميل التقييمات...</div></div>
+            </div>` : ''}
+
+          ${related.length ? `
+            <div class="related-section">
+              <h3>منتجات قد تعجبك</h3>
+              <div class="related-grid">
+                ${related.map(r => `
+                  <div class="related-card" data-related="${r.id}">
+                    <img src="${escapeHtml(r.thumb || (r.thumbs && r.thumbs[0]) || r.image || PLACEHOLDER)}"
+                         alt="${escapeHtml(r.name)}" loading="lazy" decoding="async"
+                         onerror="this.onerror=null;this.src='${PLACEHOLDER}'" />
+                    <h5>${escapeHtml(r.name)}</h5>
+                    <div class="related-price">${formatPrice(r.price)}</div>
+                  </div>`).join('')}
+              </div>
+            </div>` : ''}
         </div>
       </div>
-    </div>`);
+    </div>`, {
+      name: 'product',
+      productId: p.id,
+      url: productUrl(p.id),
+      replace: opts.replace,
+      title: `${p.name} - ${state.settings.storeName}`
+    });
+
+  setMeta('description', (p.description || p.name).slice(0, 155));
 
   $('#addFromModal', overlay)?.addEventListener('click', () => {
     addToCart(p);
     closeModal();
   });
+
+  const doShare = () => shareProduct(p);
+  $('#shareProduct', overlay)?.addEventListener('click', doShare);
+  $('#shareProduct2', overlay)?.addEventListener('click', doShare);
+
+  overlay.addEventListener('click', (e) => {
+    const rel = e.target.closest('[data-related]');
+    if (!rel) return;
+    const rp = state.products.find(x => x.id === rel.dataset.related);
+    if (rp) showProductModal(rp);
+  });
+
+  if (state.settings.reviewsEnabled) {
+    $('#writeReview', overlay)?.addEventListener('click', () => showReviewForm(p));
+    loadProductReviews(p.id);
+  }
 
   const galleryMain = $('#galleryMain', overlay);
   if (galleryMain && media.length > 1) {
@@ -850,6 +1184,303 @@ function showProductModal(p) {
       }, 100);
     }, { passive: true });
   }
+}
+
+// مشاركة المنتج: واتساب وفيسبوك ونسخ الرابط
+async function shareProduct(p) {
+  const url = productUrl(p.id);
+  const text = `${p.name}\n${formatPrice(p.price)}\n${state.settings.storeName}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: p.name, text, url });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('✓ تم نسخ رابط المنتج');
+  } catch (_) {
+    window.prompt('انسخ رابط المنتج:', url);
+  }
+}
+
+
+// ============================================
+//  التقييمات
+// ============================================
+function starsHtml(n, size = 16) {
+  const full = Math.round(n);
+  let out = '';
+  for (let i = 1; i <= 5; i++) out += `<span style="font-size:${size}px;color:${i <= full ? '#f59e0b' : '#d6d3d1'};">★</span>`;
+  return out;
+}
+
+async function loadProductReviews(productId) {
+  const list = $('#reviewsList');
+  if (!list) return;
+  try {
+    const q = query(
+      collection(db, 'reviews'),
+      where('productId', '==', productId),
+      where('approved', '==', true),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    const reviews = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b._localCreatedAt || 0) - (a._localCreatedAt || 0));
+    state.reviews[productId] = reviews;
+    renderReviews(productId);
+  } catch (err) {
+    console.error('فشل تحميل التقييمات:', err);
+    list.innerHTML = `<p class="reviews-empty">تعذّر تحميل التقييمات</p>`;
+  }
+}
+
+function renderReviews(productId) {
+  const list = $('#reviewsList');
+  if (!list) return;
+  const reviews = state.reviews[productId] || [];
+
+  const summary = $('#ratingSummary');
+  if (summary) {
+    if (reviews.length) {
+      const avg = reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length;
+      summary.innerHTML = `
+        <div class="rating-summary">
+          ${starsHtml(avg, 18)}
+          <span class="rating-avg">${avg.toFixed(1)}</span>
+          <span class="rating-count">(${reviews.length} تقييم)</span>
+        </div>`;
+    } else {
+      summary.innerHTML = '';
+    }
+  }
+
+  if (!reviews.length) {
+    list.innerHTML = `<p class="reviews-empty">لا توجد تقييمات بعد. كن أول من يقيّم هذا المنتج</p>`;
+    return;
+  }
+
+  list.innerHTML = reviews.map(r => `
+    <div class="review-item">
+      <div class="review-top">
+        <strong>${escapeHtml(r.name)}</strong>
+        <span>${starsHtml(r.rating, 14)}</span>
+      </div>
+      ${r.text ? `<p>${escapeHtml(r.text)}</p>` : ''}
+      <span class="review-date">${r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('ar-IQ') : ''}</span>
+    </div>`).join('');
+}
+
+function showReviewForm(product) {
+  let picked = 5;
+  const overlay = mountModal(`
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+          <h3>تقييم: ${escapeHtml(product.name)}</h3>
+          <button class="close-btn" data-close aria-label="إغلاق">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>تقييمك</label>
+            <div class="star-picker" id="starPicker">
+              ${[1,2,3,4,5].map(i => `<button data-star="${i}" class="star-btn ${i <= 5 ? 'on' : ''}">★</button>`).join('')}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>اسمك <span class="req">*</span></label>
+            <input type="text" id="rvName" placeholder="مثال: أحمد" maxlength="40" />
+          </div>
+          <div class="form-group">
+            <label>رأيك بالمنتج</label>
+            <textarea id="rvText" rows="3" maxlength="400" placeholder="كيف كانت تجربتك؟"></textarea>
+          </div>
+          <div id="rvError"></div>
+          <p style="font-size:12px;color:var(--text-muted);">سيظهر تقييمك بعد مراجعته من إدارة المتجر</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" data-close>إلغاء</button>
+          <button class="btn-save" id="submitReview">إرسال التقييم</button>
+        </div>
+      </div>
+    </div>`, { name: 'review' });
+
+  $('#starPicker', overlay).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-star]');
+    if (!b) return;
+    picked = parseInt(b.dataset.star);
+    $$('[data-star]', overlay).forEach(x => x.classList.toggle('on', parseInt(x.dataset.star) <= picked));
+  });
+
+  $('#submitReview', overlay).addEventListener('click', async () => {
+    const name = $('#rvName', overlay).value.trim();
+    const text = $('#rvText', overlay).value.trim();
+    const err = $('#rvError', overlay);
+    if (name.length < 2) {
+      err.innerHTML = `<div class="error-msg">⚠️ الرجاء إدخال اسمك</div>`;
+      return;
+    }
+    const btn = $('#submitReview', overlay);
+    btn.disabled = true;
+    btn.textContent = 'جاري الإرسال...';
+    try {
+      await addDoc(collection(db, 'reviews'), {
+        productId: product.id,
+        productName: product.name,
+        name, text,
+        rating: picked,
+        approved: false,
+        createdAt: serverTimestamp(),
+        _localCreatedAt: Date.now()
+      });
+      closeModal();
+      showToast('✓ شكراً لك، سيظهر تقييمك بعد المراجعة');
+    } catch (e2) {
+      console.error(e2);
+      err.innerHTML = `<div class="error-msg">⚠️ فشل الإرسال، حاول مرة أخرى</div>`;
+      btn.disabled = false;
+      btn.textContent = 'إرسال التقييم';
+    }
+  });
+}
+
+// ============================================
+//  تتبّع الطلب
+//  يُقرأ من مجموعة tracking التي لا تحتوي أي بيانات شخصية
+// ============================================
+async function hashPhone(phone) {
+  const digits = String(phone).replace(/\D/g, '').slice(-10);
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('ti:' + digits));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  } catch (_) {
+    let h = 0;
+    for (let i = 0; i < digits.length; i++) h = ((h << 5) - h + digits.charCodeAt(i)) | 0;
+    return 'f' + Math.abs(h).toString(16);
+  }
+}
+
+function showTrackingModal(opts = {}) {
+  const overlay = mountModal(`
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+          <h3>📦 تتبّع طلبك</h3>
+          <button class="close-btn" data-close aria-label="إغلاق">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>رقم الطلب <span class="req">*</span></label>
+            <input type="text" id="trkNum" placeholder="مثال: T123456" style="direction:ltr;text-align:left;" />
+          </div>
+          <div class="form-group">
+            <label>رقم هاتفك <span class="req">*</span></label>
+            <input type="tel" id="trkPhone" placeholder="07xxxxxxxxx" inputmode="numeric" style="direction:ltr;text-align:left;" />
+          </div>
+          <div id="trkResult"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-save" id="trkBtn">بحث</button>
+        </div>
+      </div>
+    </div>`, { name: 'track', replace: opts.replace });
+
+  $('#trkBtn', overlay).addEventListener('click', async () => {
+    const num = $('#trkNum', overlay).value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const phone = $('#trkPhone', overlay).value.trim();
+    const res = $('#trkResult', overlay);
+    if (!num || !phone) {
+      res.innerHTML = `<div class="error-msg">⚠️ أدخل رقم الطلب ورقم الهاتف</div>`;
+      return;
+    }
+    const btn = $('#trkBtn', overlay);
+    btn.disabled = true;
+    btn.textContent = 'جاري البحث...';
+    try {
+      const snap = await getDoc(doc(db, 'tracking', num));
+      const wanted = await hashPhone(phone);
+      if (!snap.exists() || snap.data().verify !== wanted) {
+        res.innerHTML = `<div class="error-msg">⚠️ لم نعثر على طلب بهذه المعلومات. تأكد من رقم الطلب ورقم الهاتف</div>`;
+      } else {
+        const d = snap.data();
+        const steps = ['pending', 'confirmed', 'shipped', 'delivered'];
+        const idx = steps.indexOf(d.status);
+        res.innerHTML = d.status === 'cancelled'
+          ? `<div class="track-result"><div class="track-cancelled">هذا الطلب ملغي</div></div>`
+          : `<div class="track-result">
+              <div class="track-total">${d.total ? formatPrice(d.total) : ''}</div>
+              <div class="track-steps">
+                ${steps.map((st, i) => `
+                  <div class="track-step ${i <= idx ? 'done' : ''}">
+                    <span class="track-dot">${i <= idx ? '✓' : ''}</span>
+                    <span>${STATUS_MAP[st].label}</span>
+                  </div>`).join('')}
+              </div>
+              ${d.updatedAt?.toDate ? `<p class="track-date">آخر تحديث: ${d.updatedAt.toDate().toLocaleString('ar-IQ')}</p>` : ''}
+            </div>`;
+      }
+    } catch (err) {
+      console.error(err);
+      res.innerHTML = `<div class="error-msg">⚠️ تعذّر البحث، حاول لاحقاً</div>`;
+    }
+    btn.disabled = false;
+    btn.textContent = 'بحث';
+  });
+}
+
+// ============================================
+//  الصفحات التعريفية
+// ============================================
+const INFO_PAGES = {
+  about: { title: 'من نحن', icon: 'ℹ️', key: 'pageAbout' },
+  returns: { title: 'سياسة الاستبدال والإرجاع', icon: '🔄', key: 'pageReturns' },
+  faq: { title: 'الأسئلة الشائعة', icon: '❓', key: 'pageFaq' },
+};
+
+function showInfoPage(pageId, opts = {}) {
+  const page = INFO_PAGES[pageId];
+  if (!page) return;
+  const raw = state.settings[page.key] || '';
+
+  let body;
+  if (pageId === 'faq') {
+    const items = raw.split('\n').filter(Boolean).map(line => {
+      const [q, a] = line.split('|');
+      return { q: (q || '').trim(), a: (a || '').trim() };
+    }).filter(x => x.q);
+    body = items.length
+      ? `<div class="faq-list">${items.map((it, i) => `
+          <div class="faq-item">
+            <button class="faq-q" data-faq="${i}">${escapeHtml(it.q)}<span>+</span></button>
+            <div class="faq-a" id="faq-${i}" hidden>${escapeHtml(it.a)}</div>
+          </div>`).join('')}</div>`
+      : `<p>لا توجد أسئلة بعد</p>`;
+  } else {
+    body = `<div class="info-text">${escapeHtml(raw).replace(/\n/g, '<br>')}</div>`;
+  }
+
+  const overlay = mountModal(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>${page.icon} ${page.title}</h3>
+          <button class="close-btn" data-close aria-label="إغلاق">×</button>
+        </div>
+        <div class="modal-body">${body}</div>
+      </div>
+    </div>`, { name: 'page', replace: opts.replace, title: `${page.title} - ${state.settings.storeName}` });
+
+  overlay.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-faq]');
+    if (!b) return;
+    const a = $(`#faq-${b.dataset.faq}`, overlay);
+    const open = !a.hidden;
+    a.hidden = open;
+    b.querySelector('span').textContent = open ? '+' : '−';
+  });
 }
 
 // ============================================
@@ -1175,6 +1806,8 @@ function renderAdmin() {
               {id:'dashboard',label:'الرئيسية',icon:'🏠'},
               {id:'products',label:'المنتجات',icon:'📦'},
               {id:'orders',label:'الطلبات',icon:'🛒',badge:pendingCount},
+              {id:'reviews',label:'التقييمات',icon:'⭐',badge:state.pendingReviews.length},
+              {id:'stats',label:'الإحصائيات',icon:'📊'},
               {id:'settings',label:'الإعدادات',icon:'⚙️'},
               {id:'theme',label:'التصميم',icon:'🎨'}
             ].map(t => `
@@ -1202,6 +1835,8 @@ function renderAdmin() {
   if (adminTab === 'dashboard') renderAdminDashboard();
   else if (adminTab === 'products') renderAdminProducts();
   else if (adminTab === 'orders') renderAdminOrders();
+  else if (adminTab === 'reviews') renderAdminReviews();
+  else if (adminTab === 'stats') renderAdminStats();
   else if (adminTab === 'settings') renderAdminSettings();
   else if (adminTab === 'theme') renderAdminTheme();
 
@@ -1235,6 +1870,15 @@ function renderAdminDashboard() {
         <div class="stat-value" style="font-size:18px;color:#16a34a;">${formatPrice(revenue)}</div>
       </div>
     </div>
+
+    ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? `
+      <div class="settings-card" style="border:1px solid #fdba74;background:#fff7ed;">
+        <h3>🔔 تنبيه الطلبات الجديدة</h3>
+        <p style="font-size:14px;margin-bottom:12px;">
+          فعّل الإشعارات لتصلك نغمة وتنبيه فوري عند وصول أي طلب جديد، حتى لو اللوحة مفتوحة بخلفية المتصفح.
+        </p>
+        <button class="btn-save-all" id="enableNotify">🔔 تفعيل التنبيهات</button>
+      </div>` : ''}
 
     ${base64Count > 0 ? `
       <div class="settings-card" style="border:1px solid #fca5a5;background:#fef2f2;">
@@ -1289,6 +1933,7 @@ function renderAdminDashboard() {
   }));
 
   $('#migrateBtn')?.addEventListener('click', migrateBase64ToCdn);
+  $('#enableNotify')?.addEventListener('click', requestNotifyPermission);
 }
 
 // نقل الصور القديمة من Base64 إلى CDN
@@ -1769,6 +2414,207 @@ function showOrderDetail(order) {
   });
 }
 
+
+// ============================================
+//  إدارة التقييمات
+// ============================================
+function renderAdminReviews() {
+  const pending = state.pendingReviews;
+  $('#adminContent').innerHTML = `
+    <div class="settings-card">
+      <h3>⭐ تقييمات بانتظار المراجعة (${pending.length})</h3>
+      ${pending.length === 0
+        ? `<p style="color:var(--text-muted);font-size:14px;">لا توجد تقييمات جديدة. التقييمات المعتمدة تظهر تلقائياً في صفحة المنتج.</p>`
+        : `<div class="admin-reviews">${pending.map(r => `
+            <div class="admin-review" data-rv="${r.id}">
+              <div class="admin-review-top">
+                <strong>${escapeHtml(r.name)}</strong>
+                <span>${starsHtml(r.rating, 14)}</span>
+              </div>
+              <p class="admin-review-product">على: ${escapeHtml(r.productName || '')}</p>
+              ${r.text ? `<p class="admin-review-text">${escapeHtml(r.text)}</p>` : ''}
+              <div class="admin-review-actions">
+                <button class="rv-approve" data-approve="${r.id}">✓ اعتماد</button>
+                <button class="rv-reject" data-reject="${r.id}">✕ رفض</button>
+              </div>
+            </div>`).join('')}</div>`}
+    </div>
+
+    <div class="settings-card">
+      <h3>⚙️ إعداد التقييمات</h3>
+      <div class="toggle-row">
+        <div class="toggle-row-info">
+          <p>تفعيل التقييمات في المتجر</p>
+          <p class="desc">إظهار قسم التقييمات داخل صفحة المنتج</p>
+        </div>
+        <button class="toggle ${state.settings.reviewsEnabled ? 'on' : ''}" id="tglReviews"></button>
+      </div>
+    </div>`;
+
+  $('#adminContent').addEventListener('click', async (e) => {
+    const ap = e.target.closest('[data-approve]');
+    const rj = e.target.closest('[data-reject]');
+    try {
+      if (ap) {
+        await updateDoc(doc(db, 'reviews', ap.dataset.approve), { approved: true });
+        showToast('✓ تم اعتماد التقييم');
+      } else if (rj) {
+        if (!confirm('حذف هذا التقييم؟')) return;
+        await deleteDoc(doc(db, 'reviews', rj.dataset.reject));
+        showToast('✓ تم الحذف');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('فشلت العملية', 'error');
+    }
+  });
+
+  $('#tglReviews')?.addEventListener('click', async () => {
+    const next = !state.settings.reviewsEnabled;
+    const ok = await saveSettings({ ...state.settings, reviewsEnabled: next });
+    if (ok) { showToast(next ? '✓ تم تفعيل التقييمات' : '✓ تم إيقاف التقييمات'); renderAdmin(); }
+  });
+}
+
+// ============================================
+//  الإحصائيات
+// ============================================
+function renderAdminStats() {
+  const orders = state.orders;
+  const paid = orders.filter(o => ['confirmed', 'shipped', 'delivered'].includes(o.status));
+  const delivered = orders.filter(o => o.status === 'delivered');
+  const cancelled = orders.filter(o => o.status === 'cancelled');
+
+  const revenue = delivered.reduce((s, o) => s + (o.total || 0), 0);
+  const expected = paid.reduce((s, o) => s + (o.total || 0), 0);
+  const avgOrder = paid.length ? Math.round(expected / paid.length) : 0;
+  const conv = orders.length ? Math.round((delivered.length / orders.length) * 100) : 0;
+
+  // أفضل المنتجات
+  const prodMap = {};
+  paid.forEach(o => (o.items || []).forEach(i => {
+    if (!prodMap[i.id]) prodMap[i.id] = { name: i.name, qty: 0, total: 0 };
+    prodMap[i.id].qty += i.qty || 0;
+    prodMap[i.id].total += (i.price || 0) * (i.qty || 0);
+  }));
+  const topProducts = Object.values(prodMap).sort((a, b) => b.qty - a.qty).slice(0, 8);
+  const maxQty = topProducts[0]?.qty || 1;
+
+  // المحافظات
+  const govMap = {};
+  orders.forEach(o => {
+    const g = o.customer?.governorate || 'غير محدد';
+    govMap[g] = (govMap[g] || 0) + 1;
+  });
+  const topGovs = Object.entries(govMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const maxGov = topGovs[0]?.[1] || 1;
+
+  // آخر 14 يوم
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    days.push({ d, count: 0 });
+  }
+  orders.forEach(o => {
+    const t = o.createdAt?.toDate ? o.createdAt.toDate() : (o._localCreatedAt ? new Date(o._localCreatedAt) : null);
+    if (!t) return;
+    t.setHours(0, 0, 0, 0);
+    const hit = days.find(x => x.d.getTime() === t.getTime());
+    if (hit) hit.count++;
+  });
+  const maxDay = Math.max(1, ...days.map(x => x.count));
+
+  // المنتجات التي نفدت
+  const outOfStock = state.products.filter(p => productStock(p) <= 0);
+  const lowStock = state.products.filter(p => productStock(p) > 0 && productStock(p) <= 3);
+
+  $('#adminContent').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon" style="color:#16a34a;">💰</div>
+        <div class="stat-label">إيرادات مُسلَّمة</div>
+        <div class="stat-value" style="font-size:17px;color:#16a34a;">${formatPrice(revenue)}</div></div>
+      <div class="stat-card"><div class="stat-icon" style="color:#2563eb;">📈</div>
+        <div class="stat-label">قيد التنفيذ</div>
+        <div class="stat-value" style="font-size:17px;">${formatPrice(expected - revenue)}</div></div>
+      <div class="stat-card"><div class="stat-icon">🧾</div>
+        <div class="stat-label">متوسط الطلب</div>
+        <div class="stat-value" style="font-size:17px;">${formatPrice(avgOrder)}</div></div>
+      <div class="stat-card"><div class="stat-icon" style="color:#ea580c;">✅</div>
+        <div class="stat-label">نسبة الإتمام</div>
+        <div class="stat-value">${conv}%</div></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📅 الطلبات آخر 14 يوم</h3>
+      <div class="bar-chart">
+        ${days.map(x => `
+          <div class="bar-col" title="${x.count} طلب">
+            <div class="bar" style="height:${Math.max(4, (x.count / maxDay) * 100)}%;"></div>
+            <span class="bar-label">${x.d.getDate()}</span>
+          </div>`).join('')}
+      </div>
+      <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:8px;">
+        المجموع: ${days.reduce((s, x) => s + x.count, 0)} طلب
+      </p>
+    </div>
+
+    <div class="settings-card">
+      <h3>🏆 أفضل المنتجات مبيعاً</h3>
+      ${topProducts.length === 0 ? `<p style="color:var(--text-muted);font-size:14px;">لا توجد مبيعات مؤكدة بعد</p>` : `
+        <div class="rank-list">
+          ${topProducts.map((p, i) => `
+            <div class="rank-item">
+              <span class="rank-num">${i + 1}</span>
+              <div class="rank-body">
+                <div class="rank-top"><span>${escapeHtml(p.name)}</span><strong>${p.qty} قطعة</strong></div>
+                <div class="rank-bar"><div style="width:${(p.qty / maxQty) * 100}%;"></div></div>
+                <span class="rank-sub">${formatPrice(p.total)}</span>
+              </div>
+            </div>`).join('')}
+        </div>`}
+    </div>
+
+    <div class="settings-card">
+      <h3>📍 أكثر المحافظات طلباً</h3>
+      ${topGovs.length === 0 ? `<p style="color:var(--text-muted);font-size:14px;">لا توجد طلبات بعد</p>` : `
+        <div class="rank-list">
+          ${topGovs.map(([g, c], i) => `
+            <div class="rank-item">
+              <span class="rank-num">${i + 1}</span>
+              <div class="rank-body">
+                <div class="rank-top"><span>${escapeHtml(g)}</span><strong>${c} طلب</strong></div>
+                <div class="rank-bar"><div style="width:${(c / maxGov) * 100}%;"></div></div>
+              </div>
+            </div>`).join('')}
+        </div>`}
+    </div>
+
+    ${(outOfStock.length || lowStock.length) ? `
+      <div class="settings-card" style="border:1px solid #fca5a5;background:#fef2f2;">
+        <h3>⚠️ تنبيه المخزون</h3>
+        ${outOfStock.length ? `<p style="font-size:14px;font-weight:700;margin-bottom:4px;">نفد (${outOfStock.length}):</p>
+          <p style="font-size:13px;margin-bottom:8px;">${outOfStock.map(p => escapeHtml(p.name)).join(' • ')}</p>` : ''}
+        ${lowStock.length ? `<p style="font-size:14px;font-weight:700;margin-bottom:4px;">أوشك على النفاد (${lowStock.length}):</p>
+          <p style="font-size:13px;">${lowStock.map(p => `${escapeHtml(p.name)} (${p.stock})`).join(' • ')}</p>` : ''}
+      </div>` : ''}
+
+    <div class="settings-card">
+      <h3>📋 ملخص الحالات</h3>
+      <div class="status-summary">
+        ${Object.entries(STATUS_MAP).map(([k, v]) => `
+          <div class="status-summary-item">
+            <span class="status-badge ${v.cls}">${v.label}</span>
+            <strong>${orders.filter(o => o.status === k).length}</strong>
+          </div>`).join('')}
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:12px;">
+        الأرقام محسوبة على آخر ${ORDERS_PAGE} طلب • الطلبات الملغاة: ${cancelled.length}
+      </p>
+    </div>`;
+}
+
 // ============================================
 //  الإعدادات
 // ============================================
@@ -1846,6 +2692,34 @@ function renderAdminSettings() {
       </div>
     </div>
 
+    <div class="settings-card">
+      <h3>📄 صفحات المتجر</h3>
+      <div class="form-group">
+        <label>من نحن</label>
+        <textarea id="setAbout" rows="3">${escapeHtml(s.pageAbout || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label>سياسة الاستبدال والإرجاع</label>
+        <textarea id="setReturns" rows="4">${escapeHtml(s.pageReturns || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label>الأسئلة الشائعة</label>
+        <textarea id="setFaq" rows="6">${escapeHtml(s.pageFaq || '')}</textarea>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+          كل سطر سؤال واحد بالصيغة: السؤال | الجواب
+        </p>
+      </div>
+      <div class="settings-divider"></div>
+      <div class="toggle-row">
+        <div class="toggle-row-info"><p>تتبّع الطلب للزبائن</p><p class="desc">زر في تذييل الصفحة يتيح للزبون معرفة حالة طلبه</p></div>
+        <button class="toggle ${s.trackingEnabled ? 'on' : ''}" data-toggle="trackingEnabled"></button>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-row-info"><p>منتجات مقترحة</p><p class="desc">اقتراح منتجات مشابهة داخل صفحة المنتج</p></div>
+        <button class="toggle ${s.relatedEnabled ? 'on' : ''}" data-toggle="relatedEnabled"></button>
+      </div>
+    </div>
+
     <button class="btn-save-all" id="saveAllSettings">💾 حفظ جميع الإعدادات</button>`;
 
   $$('[data-toggle]').forEach(b => b.addEventListener('click', () => {
@@ -1874,6 +2748,9 @@ function renderAdminSettings() {
     s.freeShippingMin = parseInt($('#setFreeShipping').value) || 0;
     s.whatsappNumber = $('#setWaNumber').value.replace(/\D/g, '');
     s.phoneDisplay = $('#setPhoneDisplay').value.trim();
+    s.pageAbout = $('#setAbout').value.trim();
+    s.pageReturns = $('#setReturns').value.trim();
+    s.pageFaq = $('#setFaq').value.trim();
 
     const btn = $('#saveAllSettings');
     btn.disabled = true;
@@ -1999,6 +2876,7 @@ async function init() {
     state.user = user;
     if (user && isAdminUser(user)) {
       subscribeOrders();
+      subscribePendingReviews();
       state.view = 'admin';
       state.shellReady = false;
       renderAdmin();
@@ -2008,6 +2886,7 @@ async function init() {
         signOut(auth);
       }
       unsubscribeOrders();
+      unsubscribePendingReviews();
       state.view = 'store';
       state.shellReady = false;
       renderStore(true);
@@ -2020,7 +2899,91 @@ async function init() {
   // 5) تحديث الإعدادات من السيرفر في الخلفية
   loadSettings().then(() => {
     if (state.view === 'store') renderStore(true);
+    restoreDocumentTitle();
   });
+
+  // 6) تثبيت المتجر كتطبيق + عمل جزئي بدون إنترنت
+  registerServiceWorker();
+  setupInstallPrompt();
+}
+
+// ============================================
+//  PWA
+// ============================================
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW:', err));
+  });
+}
+
+let deferredInstall = null;
+function setupInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    showInstallBanner();
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstall = null;
+    $('#installBanner')?.remove();
+  });
+}
+
+function showInstallBanner() {
+  if ($('#installBanner') || sessionStorage.getItem('ti_install_hidden')) return;
+  const bar = document.createElement('div');
+  bar.id = 'installBanner';
+  bar.className = 'install-banner';
+  bar.innerHTML = `
+    <img src="assets/logo.webp" alt="" width="36" height="36" />
+    <div class="install-text">
+      <strong>ثبّت ${escapeHtml(state.settings.storeName)}</strong>
+      <span>تصفّح أسرع من شاشتك الرئيسية</span>
+    </div>
+    <button id="installYes">تثبيت</button>
+    <button id="installNo" aria-label="إغلاق">×</button>`;
+  document.body.appendChild(bar);
+  $('#installYes').addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    await deferredInstall.userChoice;
+    deferredInstall = null;
+    bar.remove();
+  });
+  $('#installNo').addEventListener('click', () => {
+    sessionStorage.setItem('ti_install_hidden', '1');
+    bar.remove();
+  });
+}
+
+// ============================================
+//  بيانات منظمة لمحركات البحث
+// ============================================
+function injectStructuredData() {
+  try {
+    const s = state.settings;
+    const data = {
+      '@context': 'https://schema.org',
+      '@type': 'Store',
+      name: s.storeName,
+      description: s.tagline,
+      address: { '@type': 'PostalAddress', addressLocality: s.city, addressCountry: 'IQ' },
+      telephone: s.phoneDisplay,
+      url: location.origin + location.pathname,
+      currenciesAccepted: 'IQD',
+      paymentAccepted: 'Cash on Delivery'
+    };
+    let tag = document.getElementById('ld-store');
+    if (!tag) {
+      tag = document.createElement('script');
+      tag.type = 'application/ld+json';
+      tag.id = 'ld-store';
+      document.head.appendChild(tag);
+    }
+    tag.textContent = JSON.stringify(data);
+  } catch (_) {}
 }
 
 init().catch(err => {

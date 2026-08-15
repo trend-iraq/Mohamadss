@@ -2220,3 +2220,169 @@ body.dark-mode .success-screen { background: #292524; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================
+   المرحلة الثانية: مشاركة، تقييمات، تتبّع،
+   صفحات، إحصائيات، تثبيت التطبيق
+   ============================================ */
+
+/* --- زر المشاركة --- */
+.product-share-btn {
+  position: absolute; top: 12px; left: 56px; z-index: 4;
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.92); color: #1c1917;
+  font-size: 16px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex; align-items: center; justify-content: center;
+}
+.product-actions { display: flex; flex-direction: column; gap: 8px; }
+.btn-share-wide {
+  width: 100%; padding: 12px; border-radius: 14px;
+  border: 2px solid var(--border); background: transparent;
+  color: var(--text); font-family: inherit; font-size: 15px;
+  font-weight: 700; cursor: pointer;
+}
+.btn-share-wide:active { background: var(--primary-light); border-color: var(--primary); }
+
+/* --- التقييمات --- */
+.rating-summary { display: flex; align-items: center; gap: 6px; margin: 6px 0 10px; }
+.rating-avg { font-weight: 900; font-size: 15px; }
+.rating-count { font-size: 13px; color: var(--text-muted); }
+
+.reviews-section { padding: 16px; border-top: 1px solid var(--border); }
+.reviews-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.reviews-header h3 { font-family: 'Cairo', sans-serif; font-size: 17px; font-weight: 900; }
+.btn-write-review {
+  background: var(--primary-light); color: var(--primary); border: none;
+  padding: 8px 14px; border-radius: 10px; font-family: inherit;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.reviews-loading, .reviews-empty { color: var(--text-muted); font-size: 14px; text-align: center; padding: 16px 0; }
+.review-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.review-item:last-child { border-bottom: none; }
+.review-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.review-item p { font-size: 14px; line-height: 1.7; margin: 4px 0; }
+.review-date { font-size: 11px; color: var(--text-muted); }
+
+.star-picker { display: flex; gap: 6px; direction: ltr; justify-content: flex-end; }
+.star-btn {
+  background: none; border: none; font-size: 30px; cursor: pointer;
+  color: #d6d3d1; padding: 0; line-height: 1;
+}
+.star-btn.on { color: #f59e0b; }
+
+/* --- منتجات مقترحة --- */
+.related-section { padding: 16px; border-top: 1px solid var(--border); }
+.related-section h3 { font-family: 'Cairo', sans-serif; font-size: 17px; font-weight: 900; margin-bottom: 12px; }
+.related-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 640px) { .related-grid { grid-template-columns: repeat(4, 1fr); } }
+.related-card { cursor: pointer; border-radius: 12px; overflow: hidden; background: #f5f5f4; }
+.related-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #e7e5e4; }
+.related-card h5 {
+  font-size: 12px; padding: 6px 8px 0; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.related-price { font-size: 13px; font-weight: 900; color: var(--primary); padding: 2px 8px 8px; }
+
+/* --- تتبّع الطلب --- */
+.track-result { background: #f5f5f4; border-radius: 14px; padding: 16px; margin-top: 12px; }
+.track-total { font-weight: 900; font-size: 18px; color: var(--primary); text-align: center; margin-bottom: 14px; }
+.track-steps { display: flex; flex-direction: column; gap: 0; }
+.track-step { display: flex; align-items: center; gap: 10px; padding: 8px 0; position: relative; color: var(--text-muted); font-size: 14px; }
+.track-step.done { color: var(--text); font-weight: 700; }
+.track-dot {
+  width: 26px; height: 26px; border-radius: 50%; background: #e7e5e4; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0;
+}
+.track-step.done .track-dot { background: #16a34a; }
+.track-date { font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 12px; }
+.track-cancelled { text-align: center; color: #dc2626; font-weight: 700; padding: 12px; }
+
+/* --- الصفحات التعريفية --- */
+.footer-link {
+  background: none; border: none; color: inherit; font-family: inherit;
+  font-size: 14px; padding: 4px 0; cursor: pointer; display: block;
+  text-align: right; opacity: 0.85;
+}
+.footer-link:active { opacity: 1; }
+.info-text { font-size: 15px; line-height: 2; }
+.faq-list { display: flex; flex-direction: column; gap: 8px; }
+.faq-item { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.faq-q {
+  width: 100%; background: none; border: none; padding: 14px;
+  font-family: inherit; font-size: 15px; font-weight: 700; text-align: right;
+  cursor: pointer; display: flex; justify-content: space-between; gap: 8px; color: inherit;
+}
+.faq-q span { color: var(--primary); font-size: 20px; line-height: 1; }
+.faq-a { padding: 0 14px 14px; font-size: 14px; line-height: 1.9; color: var(--text-muted); }
+
+/* --- إدارة التقييمات --- */
+.admin-reviews { display: flex; flex-direction: column; gap: 10px; }
+.admin-review { background: #f5f5f4; border-radius: 12px; padding: 12px; }
+.admin-review-top { display: flex; justify-content: space-between; align-items: center; }
+.admin-review-product { font-size: 12px; color: var(--text-muted); margin: 2px 0 6px; }
+.admin-review-text { font-size: 14px; line-height: 1.7; margin-bottom: 10px; }
+.admin-review-actions { display: flex; gap: 8px; }
+.admin-review-actions button {
+  flex: 1; padding: 8px; border-radius: 10px; border: none;
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.rv-approve { background: #dcfce7; color: #15803d; }
+.rv-reject { background: #fee2e2; color: #b91c1c; }
+
+/* --- الإحصائيات --- */
+.bar-chart {
+  display: flex; align-items: flex-end; gap: 4px; height: 130px;
+  padding: 8px 0; border-bottom: 2px solid var(--border);
+}
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bar { width: 100%; background: linear-gradient(180deg, var(--primary), var(--primary-dark)); border-radius: 4px 4px 0 0; min-height: 4px; }
+.bar-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+.rank-list { display: flex; flex-direction: column; gap: 12px; }
+.rank-item { display: flex; gap: 10px; align-items: flex-start; }
+.rank-num {
+  width: 24px; height: 24px; border-radius: 8px; background: var(--primary-light);
+  color: var(--primary); font-weight: 900; font-size: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.rank-body { flex: 1; min-width: 0; }
+.rank-top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; margin-bottom: 4px; }
+.rank-top span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-bar { height: 6px; background: #e7e5e4; border-radius: 3px; overflow: hidden; }
+.rank-bar div { height: 100%; background: var(--primary); border-radius: 3px; }
+.rank-sub { font-size: 11px; color: var(--text-muted); }
+
+.status-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.status-summary-item {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #f5f5f4; padding: 10px; border-radius: 10px; font-size: 14px;
+}
+
+/* --- شريط تثبيت التطبيق --- */
+.install-banner {
+  position: fixed; bottom: 12px; right: 12px; left: 12px; z-index: 900;
+  background: #1c1917; color: #fff; border-radius: 16px; padding: 12px;
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  animation: slideUpIn 0.3s ease;
+}
+@keyframes slideUpIn { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+.install-banner img { border-radius: 8px; flex-shrink: 0; }
+.install-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.install-text strong { font-size: 14px; }
+.install-text span { font-size: 12px; opacity: 0.7; }
+.install-banner #installYes {
+  background: var(--primary); color: #fff; border: none; padding: 9px 16px;
+  border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.install-banner #installNo {
+  background: none; border: none; color: #fff; opacity: 0.6;
+  font-size: 22px; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+
+/* --- الوضع الداكن للعناصر الجديدة --- */
+body.dark-mode .track-result,
+body.dark-mode .admin-review,
+body.dark-mode .status-summary-item,
+body.dark-mode .related-card { background: #292524; }
+body.dark-mode .rank-bar { background: #44403c; }
